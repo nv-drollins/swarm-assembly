@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Runtime / scratch
+*.log
+
+# Scratch & debug scripts (not part of the app)
+e2e*.py
+test_recruit.py
+debug_*.py
+
+# OS
+.DS_Store
