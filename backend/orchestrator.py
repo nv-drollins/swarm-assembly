@@ -146,7 +146,10 @@ class Orchestrator:
             [{"role": "system", "content": SUPERVISOR["specialty"] +
               ". You assemble the smallest effective team. Be decisive."},
              {"role": "user", "content": prompt}],
-            max_tokens=2000, temperature=0.3,
+            # Nemotron 3.5 Lightning is a thinking model: a recruit decision
+            # costs ~1300 reasoning tokens before the first answer token, so a
+            # tight ceiling returns content=None with finish_reason="length".
+            max_tokens=6000, temperature=0.3,
         )
         if out["reasoning"]:
             await self.emit("reasoning", {"agent": "supervisor", "text": out["reasoning"][:500]})
@@ -167,11 +170,12 @@ class Orchestrator:
         agent = BENCH_BY_ID[tid]
         await self._state(tid, "working")
         # Announce which specialized model + Spark this agent runs on.
-        model_short = {"nemotron-lightning": "Nemotron-30B", "coder": "Qwen-Coder-7B",
-                       "writer": "Qwen3-4B", "analyst": "Nemotron-Nano-4B",
-                       "architect": "Qwen3-4B", "reviewer": "Nemotron-Nano-4B",
-                       "tester": "Qwen-Coder-7B", "researcher": "Nemotron-Nano-4B",
-                       "designer": "Nemotron-Nano-4B"}.get(agent["model"], agent["model"])
+        model_short = {"nemotron-lightning": "Nemotron-3.5-Lightning-30B",
+                       "coder": "Qwen3-Coder-30B-A3B", "tester": "Qwen3-Coder-30B-A3B",
+                       "writer": "Nemotron-3-Nano-4B", "analyst": "Nemotron-3-Nano-4B",
+                       "architect": "Nemotron-3-Nano-4B", "reviewer": "Nemotron-3-Nano-4B",
+                       "researcher": "Nemotron-3-Nano-4B",
+                       "designer": "Nemotron-3-Nano-4B"}.get(agent["model"], agent["model"])
         await self._line(tid, f"running on {model_short} (Spark {agent['node']})\u2026")
         context = ""
         if prior:
@@ -181,7 +185,7 @@ class Orchestrator:
             [{"role": "system", "content": agent["system"]},
              {"role": "user", "content": f"Team task: {task}{context}\n\n"
               f"Contribute your part as {agent['name']}. Be concise."}],
-            max_tokens=2500, temperature=0.4,
+            max_tokens=6000, temperature=0.4,  # headroom for the thinking trace
             base=agent["endpoint"], model=agent["model"],  # each specialist on its OWN model
         )
         if out["reasoning"]:
@@ -197,7 +201,7 @@ class Orchestrator:
                     [{"role": "system", "content": "Output ONLY one ```python code block that "
                       "runs with the stdlib and prints a result. No prose."},
                      {"role": "user", "content": f"Task: {task}\n\nWrite the runnable Python now."}],
-                    max_tokens=1200, temperature=0.2,
+                    max_tokens=4000, temperature=0.2,
                     base=agent["endpoint"], model=agent["model"],
                 )
                 code = _extract_python(retry["content"])
@@ -224,7 +228,7 @@ class Orchestrator:
               "into a clear, concise final result for the user."},
              {"role": "user", "content": f"Task: {task}\n\nTeam contributions:\n{digest}\n\n"
               "Write the final result (3-5 sentences)."}],
-            max_tokens=2500, temperature=0.4,
+            max_tokens=6000, temperature=0.4,
         )
         await self._state("supervisor", "idle")
         await self._line("supervisor", "final result ready \u2728")

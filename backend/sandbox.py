@@ -12,12 +12,24 @@ model, no second vLLM. If tooling is unavailable, callers fall back to local
 subprocess so the demo still runs.
 """
 import asyncio
+import glob
 import os
 import shutil
 
-OPENSHELL = shutil.which("openshell") or os.path.expanduser("~/.local/bin/openshell")
-NEMOCLAW = shutil.which("nemoclaw") or os.path.expanduser(
-    "~/.nvm/versions/node/v22.23.2/bin/nemoclaw")
+
+def _find_bin(name: str, extra_globs: tuple[str, ...] = ()) -> str:
+    found = shutil.which(name)
+    if found:
+        return found
+    for pat in [f"~/.local/bin/{name}", *extra_globs]:
+        for p in sorted(glob.glob(os.path.expanduser(pat)), reverse=True):
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                return p
+    return ""
+
+
+OPENSHELL = _find_bin("openshell")
+NEMOCLAW = _find_bin("nemoclaw", ("~/.nvm/versions/node/*/bin/nemoclaw",))
 
 ENDPOINT_URL = os.environ.get("SWARM_SANDBOX_ENDPOINT", "http://host.openshell.internal:8001/v1")
 MODEL = os.environ.get("SWARM_MODEL", "nemotron-lightning")

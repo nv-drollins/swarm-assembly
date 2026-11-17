@@ -29,9 +29,21 @@ class LLMClient:
             d = r.json()
         choice = d["choices"][0]
         msg = choice["message"]
+        # Reasoning models expose their trace under different keys depending on
+        # the parser: Nemotron 3.5 Lightning uses "reasoning", others use
+        # "reasoning_content". Read both so the UI's think-trace channel works
+        # regardless of which model a specialist is pinned to.
+        reasoning = (msg.get("reasoning") or msg.get("reasoning_content") or "").strip()
+        content = (msg.get("content") or "").strip()
+        # A thinking model that hits the token ceiling mid-thought returns
+        # content=None with finish_reason="length". Falling back to the tail of
+        # the reasoning keeps the relay moving instead of handing the next
+        # teammate an empty contribution.
+        if not content and reasoning:
+            content = reasoning[-1500:]
         return {
-            "content": (msg.get("content") or "").strip(),
-            "reasoning": (msg.get("reasoning_content") or "").strip(),
+            "content": content,
+            "reasoning": reasoning,
             "finish": choice.get("finish_reason"),
         }
 

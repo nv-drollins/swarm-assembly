@@ -12,6 +12,7 @@ const COLORS = { idle:'#8b97a8', recruited:'#ffcf33', assembling:'#2fb8ff',
 
 let supervisor = null;      // {id,name,emoji}
 let bench = [];             // [{id,name,emoji,skills}]
+let nodeHosts = {'1':'Spark 1', '2':'Spark 2'};
 let nodes = {};             // id -> {benchX,benchY, x,y, tx,ty, state, pulse, inTeam}
 let team = [];              // current recruited team ids
 let sandboxBox = null;      // {team:[ids], up:bool}
@@ -133,8 +134,8 @@ function drawBackground(w,h){
   ctx.beginPath(); ctx.moveTo(midX, h*0.24); ctx.lineTo(midX, h); ctx.stroke(); ctx.setLineDash([]);
   // zone labels
   ctx.font='600 12px Segoe UI'; ctx.textAlign='center';
-  ctx.fillStyle=rgba('#76B900',0.75); ctx.fillText('◢ SPARK 1  ·  192.168.1.124', w*0.25, h*0.28);
-  ctx.fillStyle=rgba('#c186ff',0.75); ctx.fillText('SPARK 2  ·  192.168.1.188 ◣', w*0.75, h*0.28);
+  ctx.fillStyle=rgba('#76B900',0.75); ctx.fillText('◢ SPARK 1  ·  '+(nodeHosts['1']||'node1'), w*0.25, h*0.28);
+  ctx.fillStyle=rgba('#c186ff',0.75); ctx.fillText('SPARK 2  ·  '+(nodeHosts['2']||'node2')+' ◣', w*0.75, h*0.28);
   ctx.fillStyle='#ffffff'; ctx.font='700 13px Segoe UI';
   ctx.fillText('BENCH — idle specialists', w*0.25, h*0.94);
   ctx.fillText('BENCH — idle specialists', w*0.75, h*0.94);
@@ -211,7 +212,7 @@ function drawNode(a){
   ctx.fillText(a.name,node.x,node.y+R+13);
   // model tag (shows the specialist's own model)
   if(a.model && !node.sup){
-    const mshort={'nemotron-lightning':'Nemotron-30B','coder':'Qwen-Coder-7B','writer':'Qwen3-4B','analyst':'Nemotron-Nano-4B','architect':'Qwen3-4B','reviewer':'Nemotron-Nano-4B','tester':'Qwen-Coder-7B','researcher':'Nemotron-Nano-4B','designer':'Nemotron-Nano-4B'}[a.model]||a.model;
+    const mshort={'nemotron-lightning':'Nemotron-3.5-30B','coder':'Qwen3-Coder-30B','writer':'Nemotron-3-Nano-4B','analyst':'Nemotron-3-Nano-4B','architect':'Nemotron-3-Nano-4B','reviewer':'Nemotron-3-Nano-4B','tester':'Qwen3-Coder-30B','researcher':'Nemotron-3-Nano-4B','designer':'Nemotron-3-Nano-4B'}[a.model]||a.model;
     ctx.font='9px SF Mono,Consolas,monospace'; ctx.fillStyle=rgba(col,0.85);
     ctx.fillText(mshort,node.x,node.y+R+25);
   }
@@ -311,7 +312,7 @@ async function showCodeActions(){
 
 async function boot(){
   const b=await (await fetch('/api/bench')).json();
-  supervisor=b.supervisor; bench=b.bench;
+  supervisor=b.supervisor; bench=b.bench; if(b.nodes) nodeHosts=b.nodes;
   resize();
   const tasks=await (await fetch('/api/tasks')).json();
   tasks.forEach(t=>{ const btn=document.createElement('button');

@@ -44,11 +44,11 @@ real GPU telemetry. Nothing is simulated.
          ┌──────────────────────────────┴──────────────────────────────┐
          │                                                              │
    SPARK 1 (node1)                                              SPARK 2 (node2)
-   ├─ :8001  Supervisor  Nemotron 3.5 Lightning 30B            ├─ :8011 Analyst    Nemotron-Nano-4B
-   ├─ :8013  Coder       Qwen2.5-Coder-7B-FP8                  ├─ :8012 Writer     Qwen3-4B
-   ├─ :8017  Researcher  Nemotron-Nano-4B-FP8                  ├─ :8014 Architect  Qwen3-4B
-   ├─ :8018  Designer    Nemotron-Nano-4B-FP8                  ├─ :8015 Tester     Qwen2.5-Coder-7B-FP8
-   └─ Nemoclaw/OpenShell sandbox  (shared "swarm-team")        └─ :8016 Reviewer   Nemotron-Nano-4B-FP8
+   ├─ :8001  Supervisor  Nemotron-3.5-Lightning-30B-NVFP4     ├─ :8011 Analyst    Nemotron-3-Nano-4B-FP8
+   ├─ :8013  Coder       Qwen3-Coder-30B-A3B-FP8               ├─ :8012 Writer     Nemotron-3-Nano-4B-FP8
+   ├─ :8017  Researcher  Nemotron-3-Nano-4B-FP8                ├─ :8014 Architect  Nemotron-3-Nano-4B-FP8
+   ├─ :8018  Designer    Nemotron-3-Nano-4B-FP8                ├─ :8015 Tester     Qwen3-Coder-30B-A3B-FP8
+   └─ Nemoclaw/OpenShell sandbox  (shared "swarm-team")        └─ :8016 Reviewer   Nemotron-3-Nano-4B-FP8
 ```
 
 - Each model is served by its own **vLLM** container (NVIDIA vLLM image), pinned to
@@ -62,18 +62,24 @@ real GPU telemetry. Nothing is simulated.
 
 | Agent | Role | Model | Spark | Port |
 |-------|------|-------|:-----:|:----:|
-| **Supervisor** | Task decomposition & team assembly | Nemotron 3.5 Lightning **30B** | 1 | 8001 |
-| **Researcher** | Gather facts & context | Nemotron-Nano-**4B** | 1 | 8017 |
-| **Coder** | Write & run code | **Qwen2.5-Coder-7B** | 1 | 8013 |
-| **Designer** | UX / presentation of output | Nemotron-Nano-**4B** | 1 | 8018 |
-| **Analyst** | Data analysis & insights | Nemotron-Nano-**4B** | 2 | 8011 |
-| **Architect** | System design & structure | **Qwen3-4B** | 2 | 8014 |
-| **Writer** | Documentation & prose | **Qwen3-4B** | 2 | 8012 |
-| **Reviewer** | Code review & risk | Nemotron-Nano-**4B** | 2 | 8016 |
-| **Tester** | Test design & validation | **Qwen2.5-Coder-7B** | 2 | 8015 |
+| **Supervisor** | Task decomposition & team assembly | Nemotron-3.5-Lightning-**30B**-A3B (NVFP4) | 1 | 8001 |
+| **Researcher** | Gather facts & context | Nemotron-3-Nano-**4B** (FP8) | 1 | 8017 |
+| **Coder** | Write & run code | **Qwen3-Coder-30B-A3B** (FP8) | 1 | 8013 |
+| **Designer** | UX / presentation of output | Nemotron-3-Nano-**4B** (FP8) | 1 | 8018 |
+| **Analyst** | Data analysis & insights | Nemotron-3-Nano-**4B** (FP8) | 2 | 8011 |
+| **Architect** | System design & structure | Nemotron-3-Nano-**4B** (FP8) | 2 | 8014 |
+| **Writer** | Documentation & prose | Nemotron-3-Nano-**4B** (FP8) | 2 | 8012 |
+| **Reviewer** | Code review & risk | Nemotron-3-Nano-**4B** (FP8) | 2 | 8016 |
+| **Tester** | Test design & validation | **Qwen3-Coder-30B-A3B** (FP8) | 2 | 8015 |
 
-*Model choices: NVIDIA Nemotron for reasoning/analysis roles, Qwen2.5-Coder for
-code roles, Qwen3 for design/writing. All FP8 where available (native on Blackwell).*
+*Model choices: NVIDIA Nemotron for every reasoning, analysis, design and writing
+role; Qwen3-Coder for the two code-execution roles (there is no comparable open
+coder model in the Nemotron family). Quantized throughout — NVFP4 for the 30B
+supervisor, FP8 elsewhere, both native on Blackwell.*
+
+*Why a 30B MoE for the Coder: Qwen3-Coder-30B-A3B activates only 3B parameters
+per token, so it answers at roughly 4B-class speed while coding far better than
+the 7B dense model it replaces. GB10's 121GB of unified memory has room for it.*
 
 ### Lifecycle of a task
 
@@ -111,16 +117,33 @@ the seeded sample and shows the real result).
 
 ## Prerequisites
 
-- **Two DGX Sparks (GB10)** clustered on the same network, reachable via SSH.
-- On **both** nodes: Docker + NVIDIA Container Toolkit, and the NVIDIA vLLM image
-  (the installer pulls it). Node 2 also needs Nemoclaw/OpenShell for its sandbox
-  (the installer can set this up).
-- A **HuggingFace token** with access to the model repos (for the one-time
-  download). Nemotron models may require accepting terms on HF.
-- Python 3.11+ on node 1 (for the FastAPI backend).
+- **Two DGX Sparks (GB10)** on the same network, reachable from each other by SSH.
+  A stock DGX OS image is enough — `install.sh` does the rest.
+- Your SSH key installed on both nodes, **and** node 1's key installed on node 2
+  (the backend polls Spark 2's telemetry over SSH from node 1).
+- ~60GB free on node 1 and ~40GB on node 2 for the model cache, plus ~39GB each
+  for the vLLM container image.
+- **No HuggingFace token needed** — all three checkpoints are ungated.
 
-See **`install.sh`** — it checks each prerequisite and guides you through anything
-missing. It does **not** assume specific IPs or passwordless sudo.
+`install.sh` handles everything else, and is safe to re-run:
+
+| Installs / configures | Why |
+|---|---|
+| `python3-venv`, `python3-pip` | the FastAPI backend's venv |
+| NVIDIA container runtime (`nvidia-ctk runtime configure`) | a fresh DGX image ships Docker and the toolkit but doesn't wire them together — containers can't see the GPU until this runs |
+| the user's `docker` group membership | so later steps don't all need `sudo` |
+| NGC vLLM image, model checkpoints | the 9 model endpoints |
+| nemoclaw / openshell + the `swarm-team` sandbox | real code execution for Coder/Tester |
+
+It does **not** assume specific IPs or passwordless sudo: every privileged step
+is tried with `sudo -n` first, and prints the exact command for you if that fails.
+
+### Networking
+
+The two Sparks only exchange small OpenAI-format JSON requests plus a 1 Hz SSH
+telemetry poll. Each model loads entirely on one GB10 — there is no tensor
+parallelism and no NCCL traffic. **Plain 1GbE is fine**; the ConnectX-7 200GbE
+ports do not need to be configured for this demo.
 
 ---
 
@@ -128,14 +151,21 @@ missing. It does **not** assume specific IPs or passwordless sudo.
 
 ```bash
 # On node 1 (the backend host), from the repo root:
-./install.sh              # prompts for the two node IPs + HF token, checks prereqs,
-                          # pulls the vLLM image, downloads models, serves all 9
-                          # model endpoints across both Sparks, provisions the sandbox
+./install.sh              # prompts for the two node hostnames + SSH user, installs
+                          # prerequisites, pulls the vLLM image, downloads models,
+                          # serves all 9 endpoints across both Sparks, provisions
+                          # the sandbox. No HF token required.
 
-# then launch the dashboard:
-SWARM_NODE1=<node1-ip> SWARM_NODE2=<node2-ip> ./run.sh
-# open http://<node1-ip>:4456
+# then launch the dashboard (also on node 1):
+SWARM_NODE1=<node1-host> SWARM_NODE2=<node2-host> ./run.sh
+# open http://<node1-host>:4456
 ```
+
+First run downloads ~39GB of container image and ~60GB of weights per node, so
+budget an hour on a decent link. Afterwards everything is cached and
+`install.sh` re-runs in under a minute, restarting only what isn't up.
+
+Prefer **hostnames** over IPs — they survive a venue's DHCP.
 
 `run.sh` creates a venv, installs Python deps, and serves the dashboard on `:4456`.
 
@@ -143,10 +173,14 @@ SWARM_NODE1=<node1-ip> SWARM_NODE2=<node2-ip> ./run.sh
 
 | Var | Default | Purpose |
 |-----|---------|---------|
-| `SWARM_NODE1` | `192.168.1.124` | IP/host of Spark 1 (supervisor, coder, researcher, designer + backend + sandbox) |
-| `SWARM_NODE2` | `192.168.1.188` | IP/host of Spark 2 (analyst, writer, architect, tester, reviewer) |
-| `SWARM_VLLM_BASE` | `http://localhost:8001/v1` | supervisor model endpoint |
+| `SWARM_NODE1` | *(required)* | host of Spark 1 (supervisor, coder, researcher, designer + backend + sandbox) |
+| `SWARM_NODE2` | *(required)* | host of Spark 2 (analyst, writer, architect, tester, reviewer) |
+| `SWARM_SSH_USER` | `nvidia` | SSH user used for telemetry polling |
+| `SWARM_VLLM_BASE` | `http://$SWARM_NODE1:8001/v1` | supervisor model endpoint |
 | `SWARM_MODEL` | `nemotron-lightning` | supervisor served-model name |
+
+Both node vars are **required** — the repo carries no site-specific addresses, so
+there is nothing stale to discover at a venue.
 
 ---
 

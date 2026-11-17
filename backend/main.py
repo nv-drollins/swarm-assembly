@@ -75,7 +75,9 @@ async def emit(event: str, data: dict):
 
 @app.get("/api/bench")
 async def get_bench():
+    from roster import NODE1, NODE2
     return {"supervisor": {k: SUPERVISOR[k] for k in ("id", "name", "emoji", "node")},
+            "nodes": {"1": NODE1, "2": NODE2},
             "bench": [{**{k: a[k] for k in ("id", "name", "emoji", "skills", "node")},
                        "model": a["model"]} for a in BENCH]}
 

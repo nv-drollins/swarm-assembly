@@ -7,10 +7,15 @@ returns [N/A] for GPU mem via nvidia-smi, so we use `free` for the memory bar.
 import asyncio
 import time
 
+import os
+
+# Hosts come from the environment (run.sh exports them) so the repo carries no
+# site-specific addresses -- at a venue you change SWARM_NODE1/2, nothing else.
 NODES = {
-    1: {"host": "192.168.1.124", "label": "Spark 1"},
-    2: {"host": "192.168.1.188", "label": "Spark 2"},
+    1: {"host": os.environ.get("SWARM_NODE1", "localhost"), "label": "Spark 1"},
+    2: {"host": os.environ.get("SWARM_NODE2", "localhost"), "label": "Spark 2"},
 }
+SSH_USER = os.environ.get("SWARM_SSH_USER", "nvidia")
 
 # nvidia-smi (gpu util %, temp C, power W) + free (mem used/total MB), one hop.
 _REMOTE = (
@@ -28,7 +33,7 @@ async def _probe(node: int, host: str) -> dict:
     try:
         proc = await asyncio.create_subprocess_exec(
             "ssh", "-o", "ConnectTimeout=4", "-o", "StrictHostKeyChecking=no",
-            f"nvidia@{host}", _REMOTE,
+            f"{SSH_USER}@{host}", _REMOTE,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
         )
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=8)
