@@ -77,8 +77,21 @@ GEMMA26B_REPO="nvidia/Gemma-4-26B-A4B-NVFP4"
 SSH_OPTS=(-o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new -o BatchMode=yes)
 SSH1(){ ssh "${SSH_OPTS[@]}" "$SSHUSER@$NODE1" "$@"; }
 SSH2(){ ssh "${SSH_OPTS[@]}" "$SSHUSER@$NODE2" "$@"; }
-SUDO1(){ SSH1 "sudo -n $*" 2>/dev/null; }
-SUDO2(){ SSH2 "sudo -n $*" 2>/dev/null; }
+SUDO_PASS=""
+SUDO1(){
+  if [[ -n "$SUDO_PASS" ]]; then
+    printf '%s\n' "$SUDO_PASS" | SSH1 "sudo -S -p '' $*" 2>/dev/null
+  else
+    SSH1 "sudo -n $*" 2>/dev/null
+  fi
+}
+SUDO2(){
+  if [[ -n "$SUDO_PASS" ]]; then
+    printf '%s\n' "$SUDO_PASS" | SSH2 "sudo -S -p '' $*" 2>/dev/null
+  else
+    SSH2 "sudo -n $*" 2>/dev/null
+  fi
+}
 
 # ---- 1. connectivity -------------------------------------------------------
 hr; c_b "1) Connectivity"
@@ -90,6 +103,22 @@ SSH1 "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout
   && c_g "  ✓ node1 → node2 SSH (telemetry path)" \
   || c_y "  ! node1 cannot SSH to node2 — Spark 2 telemetry will read as offline.
       Fix on node1:  ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519 && ssh-copy-id $SSHUSER@$NODE2"
+
+# Check if sudo requires a password on either node; if so, prompt once in memory
+# and configure passwordless sudo so setup-cluster.sh and docker commands work non-interactively.
+if ! SSH1 "sudo -n true" 2>/dev/null || ! SSH2 "sudo -n true" 2>/dev/null; then
+  c_y "  … sudo on a fresh image requires a password; enter $SSHUSER's sudo password once (kept in memory only):"
+  read -rsp "    [sudo] password for $SSHUSER: " SUDO_PASS; echo ""
+  for pair in "node1 ($NODE1):SUDO1:SSH1" "node2 ($NODE2):SUDO2:SSH2"; do
+    IFS=: read -r lbl sfn rfn <<< "$pair"
+    if ! $rfn "sudo -n true" 2>/dev/null; then
+      $sfn "bash -c 'echo \"$SSHUSER ALL=(ALL) NOPASSWD:ALL\" > /etc/sudoers.d/90-$SSHUSER-nopasswd && chmod 0440 /etc/sudoers.d/90-$SSHUSER-nopasswd'" \
+        && c_g "  ✓ configured passwordless sudo on $lbl" \
+        || die "sudo authentication failed on $lbl — check your password"
+    fi
+  done
+  SUDO_PASS=""
+fi
 
 # ---- 2. host prerequisites on both nodes -----------------------------------
 prep_node(){ # $1=label  $2=ssh-fn  $3=sudo-fn
@@ -153,12 +182,12 @@ if [[ "$CLUSTER_MODE" == "clustered" ]]; then
   N2_IP="${N2_IP:-$NODE2}"
   SSH1 "test -d ~/spark-vllm-docker || git clone -q https://github.com/eugr/spark-vllm-docker.git ~/spark-vllm-docker"
   if SSH1 "cd ~/spark-vllm-docker && ./setup-cluster.sh --doctor --dry-run >/dev/null 2>&1"; then
-    c_g "  ✓ 200GbE ConnectX-7 cluster & RoCEv2 links verified (doctor passed)"
+    c_g "  ✓ 200GbE ConnectX-7 cluster & RoCEv2 links verified ($NODE1 ↔ $NODE2)"
   else
-    c_y "  … configuring 200GbE ConnectX-7 direct link ($N1_IP ↔ $N2_IP, MTU 9000)"
-    SSH1 "cd ~/spark-vllm-docker && ./setup-cluster.sh $N1_IP $N2_IP --topology direct --mtu 9000 --yes" >/dev/null 2>&1 \
-      && c_g "  ✓ 200GbE ConnectX-7 cluster configured" \
-      || die "setup-cluster.sh failed — check QSFP cable between $NODE1 and $NODE2"
+    c_y "  … configuring 200GbE ConnectX-7 direct link ($NODE1 [$N1_IP] ↔ $NODE2 [$N2_IP], MTU 9000)"
+    SSH1 "cd ~/spark-vllm-docker && ./setup-cluster.sh $N1_IP $N2_IP --topology direct --mtu 9000 --yes" \
+      && c_g "  ✓ 200GbE ConnectX-7 cluster configured ($NODE1 ↔ $NODE2)" \
+      || die "setup-cluster.sh failed — check output above"
   fi
 fi
 
