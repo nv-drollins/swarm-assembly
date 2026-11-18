@@ -403,8 +403,16 @@ SSH1 "mkdir -p ~/swarm-assembly && cat > ~/swarm-assembly/.swarm.env <<'EOF'
 $ENV_BLOCK
 EOF" 2>/dev/null || true
 
+# ---- 7. start dashboard on node1 (:4456) -----------------------------------
+hr; c_b "7) Dashboard (:4456 on node1)"
+if SSH1 "test -f ~/swarm-assembly/run.sh" 2>/dev/null; then
+  SSH1 "cd ~/swarm-assembly && chmod +x run.sh && ./run.sh"
+elif [ -f ./run.sh ]; then
+  chmod +x ./run.sh && ./run.sh
+fi
+
 # ---- done ------------------------------------------------------------------
 hr; c_g "Provisioning complete ($CLUSTER_MODE mode)."
-c_b "Next: launch the dashboard ON node1:"
-echo "  SWARM_NODE1=$NODE1 SWARM_NODE2=$NODE2 SWARM_CLUSTER_MODE=$CLUSTER_MODE ./run.sh"
-echo "  open http://$NODE1:4456"
+c_b "Dashboard is live at:"
+echo "  http://$NODE1:4456"
+echo "  (restart anytime with: ./run.sh   |   stop with: ./run.sh --stop)"

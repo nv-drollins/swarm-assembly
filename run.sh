@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 # Swarm Assembly launcher. Run this ON node 1 (the backend host).
 #
-#   SWARM_NODE1=<node1-host> SWARM_NODE2=<node2-host> ./run.sh
+#   ./run.sh            # starts (or restarts) the dashboard in the background
+#   ./run.sh --stop     # stops the background dashboard
+#   ./run.sh --fg       # runs in the foreground (Ctrl+C to stop)
 #
 # If install.sh wrote .swarm.env, its defaults (nodes, mode, supervisor model)
 # are loaded automatically and can still be overridden by the environment.
 set -euo pipefail
 cd "$(dirname "$0")"
+
+if [ "${1:-}" = "--stop" ] || [ "${1:-}" = "stop" ]; then
+  pkill -f "uvicorn main:app.*--port 4456" 2>/dev/null && echo "Stopped Swarm Assembly (:4456)." || echo "Swarm Assembly was not running."
+  exit 0
+fi
+
+FG=0
+if [ "${1:-}" = "--fg" ] || [ "${1:-}" = "--foreground" ]; then
+  FG=1
+  shift
+fi
 
 if [ -f .swarm.env ]; then
   # shellcheck disable=SC1091
@@ -40,5 +53,18 @@ fi
 
 echo "Swarm Assembly  →  http://${SWARM_NODE1}:4456"
 echo "  Mode: ${SWARM_CLUSTER_MODE}   Spark 1: ${SWARM_NODE1}   Spark 2: ${SWARM_NODE2}   supervisor: ${SWARM_MODEL} (${SWARM_VLLM_BASE})"
+
+pkill -f "uvicorn main:app.*--port 4456" 2>/dev/null || true
+sleep 1
+
 cd backend
-exec "$VENV/bin/uvicorn" main:app --host 0.0.0.0 --port 4456 "$@"
+if [ "$FG" -eq 1 ]; then
+  exec "$VENV/bin/uvicorn" main:app --host 0.0.0.0 --port 4456 --no-access-log "$@"
+else
+  nohup "$VENV/bin/uvicorn" main:app --host 0.0.0.0 --port 4456 --no-access-log "$@" > /tmp/swarm-web.log 2>&1 < /dev/null &
+  for _ in $(seq 1 15); do
+    curl -s http://localhost:4456/api/health >/dev/null 2>&1 && break
+    sleep 1
+  done
+  echo "  ✓ Running in background (PID $!, log: /tmp/swarm-web.log, stop with: ./run.sh --stop)"
+fi
