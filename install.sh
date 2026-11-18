@@ -199,8 +199,8 @@ SSH2 "test -f $HF_CACHE/nano_v3_reasoning_parser.py || wget -q -O $HF_CACHE/nano
 # ---- 5. serve the models ---------------------------------------------------
 # GPU memory budget on 121GB unified GB10 memory:
 #   Clustered Mode:
-#     Spark 1: 0.48 (Nemotron-3-Super-120B TP=2 shard) + 0.28 (Devstral-24B) = 0.76
-#     Spark 2: 0.48 (Nemotron-3-Super-120B TP=2 shard) + 0.20 (Nano-30B) + 0.18 (Gemma-4-26B) = 0.86
+#     Spark 1: 0.44 (Nemotron-3-Super-120B TP=2 shard) + 0.28 (Devstral-24B) = 0.72
+#     Spark 2: 0.44 (Nemotron-3-Super-120B TP=2 shard) + 0.19 (Nano-30B) + 0.18 (Gemma-4-26B) = 0.81
 #   Standard Mode:
 #     Spark 1: 0.28 (Devstral-24B) + 0.25 (Nemotron-3.5-Lightning-30B) = 0.53
 #     Spark 2: 0.25 (Nano-30B) + 0.25 (Gemma-4-26B) = 0.50
@@ -230,7 +230,7 @@ serve_solo(){ local run="$1" name="$2" repo="$3" port="$4" util="$5" extra="${6:
     -v /home/$SSHUSER/.triton:/root/.triton \
     $VLLM_TAG \
     vllm serve $repo --host 0.0.0.0 --port $port --served-model-name $name \
-    --gpu-memory-utilization $util --max-model-len 8192 --max-num-seqs 16 \
+    --gpu-memory-utilization $util --max-model-len 8192 --max-num-seqs 8 \
     --kv-cache-dtype fp8 --trust-remote-code --enforce-eager $extra >/dev/null" 2>/dev/null || return 1
   wait_ready "$run" "$name" "$port" "spec-$name"
 }
@@ -252,9 +252,9 @@ if [[ "$CLUSTER_MODE" == "clustered" ]]; then
           --kv-cache-dtype fp8 \
           --moe-backend cutlass \
           --trust-remote-code \
-          --gpu-memory-utilization 0.48 \
+          --gpu-memory-utilization 0.44 \
           --max-model-len 16384 \
-          --max-num-seqs 10 \
+          --max-num-seqs 8 \
           --enable-prefix-caching \
           --host 0.0.0.0 \
           --port $SUPERVISOR_PORT \
@@ -269,7 +269,7 @@ if [[ "$CLUSTER_MODE" == "clustered" ]]; then
           --enforce-eager >/dev/null"
     wait_ready SSH1 "$SUPERVISOR_NAME" "$SUPERVISOR_PORT" "vllm_super"
   fi
-  NANO_UTIL="0.20"
+  NANO_UTIL="0.19"
   GEMMA_UTIL="0.18"
 else
   SSH1 "cd ~/spark-vllm-docker 2>/dev/null && ./launch-cluster.sh --name vllm_super stop >/dev/null 2>&1 || true"

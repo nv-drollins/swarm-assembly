@@ -63,6 +63,8 @@ async def _probe(node: int, host: str) -> dict:
                 parts = l.split()
                 mem_total, mem_used = int(parts[0]), int(parts[1])
                 mem_avail = int(parts[2]) if len(parts) > 2 else max(0, mem_total - mem_used)
+        if not mem_total:
+            return {"node": node, "ok": False}
         # Infiniband port_rcv_data / port_xmit_data counters are in 32-bit words (4 bytes each).
         roce_bytes = roce_dwords * 4
         roce_mbps = 0.0
