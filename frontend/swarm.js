@@ -396,13 +396,55 @@ function escHtml(s){
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// Turn any mention of /tmp/sample.txt or sample.txt into a clickable inspector link.
+function linkifySample(html){
+  return html.replace(/(\/tmp\/sample\.txt|\bsample\.txt\b)/g,
+    '<span class="file-link" onclick="event.stopPropagation();openSampleModal()" title="Click to inspect /tmp/sample.txt and ground-truth stats">📄 $1</span>');
+}
+
+async function openSampleModal(retestStdout=null){
+  const modal = document.getElementById('sample-modal');
+  const body = document.getElementById('sample-modal-body');
+  if(!modal || !body) return;
+  modal.classList.add('open');
+  try {
+    const d = await (await fetch('/api/sample')).json();
+    const s = d.stats || {};
+    const topRows = (s.top_words || []).map(([w, c], i) =>
+      `<span style="display:inline-block;min-width:110px;padding:3px 8px;margin:2px;background:rgba(255,255,255,0.04);border:1px solid var(--edge);border-radius:5px;font-family:'SF Mono',Consolas,monospace;font-size:11.5px">#${i+1} <strong style="color:var(--accent)">${escHtml(w)}</strong>: ${c}</span>`
+    ).join('');
+    const retestBlock = retestStdout !== null
+      ? `<div style="margin-top:10px"><div style="color:var(--nv);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.8px">▶ Latest Sandbox Execution Output (stdout)</div><div class="modal-pre" style="border-color:var(--nv)">${escHtml(retestStdout || '(empty stdout)')}</div></div>`
+      : '';
+    body.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span style="color:var(--dim);font-size:11.5px;text-transform:uppercase;letter-spacing:0.8px;font-weight:600">Raw File Content (${escHtml(d.path)})</span>
+        <a href="/api/sample.txt" target="_blank" style="color:var(--blue);font-size:11.5px;font-family:'SF Mono',Consolas,monospace">↗ Open raw /api/sample.txt</a>
+      </div>
+      <div class="modal-pre">${escHtml(d.content)}</div>
+      <div style="color:var(--dim);font-size:11.5px;text-transform:uppercase;letter-spacing:0.8px;font-weight:600;margin-bottom:6px">Ground-Truth Reference Statistics (to verify generated code)</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;font-family:'SF Mono',Consolas,monospace;font-size:12px">
+        <span>Total words: <strong style="color:#fff">${s.total_words}</strong></span>
+        <span>Unique words: <strong style="color:#fff">${s.unique_words}</strong></span>
+        <span>Avg word length: <strong style="color:#fff">${s.avg_word_length}</strong></span>
+      </div>
+      <div style="margin-bottom:4px;font-size:11.5px;color:var(--dim)">Expected Word Frequencies (Top 10):</div>
+      <div>${topRows}</div>
+      ${retestBlock}
+    `;
+  } catch (e) {
+    body.textContent = 'Could not load /api/sample';
+  }
+}
+
 // Safe lightweight Markdown renderer for the Final Result panel.
 function renderMarkdown(md){
   const lines = escHtml(md || '').split('\n');
   let html = '', inList = false;
-  const inline = s => s
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  const inline = s => linkifySample(
+    s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+     .replace(/`([^`]+)`/g, '<code>$1</code>')
+  );
 
   for(const raw of lines){
     const l = raw.trim();
@@ -420,7 +462,7 @@ function renderMarkdown(md){
     }
   }
   if(inList) html += '</ul>';
-  return html || `<p>${escHtml(md)}</p>`;
+  return html || `<p>${linkifySample(escHtml(md))}</p>`;
 }
 
 function addMsg(id, text, cls=''){
@@ -433,7 +475,7 @@ function addMsg(id, text, cls=''){
     const toggleHtml = long
       ? `<span class="r-toggle">${div.classList.contains('collapsed') ? '[expand]' : '[collapse]'}</span>`
       : '';
-    div.innerHTML = `<span class="who" style="color:${agentColor(id)}">[${name}]</span> ${toggleHtml}<div class="r-body">${escHtml(text)}</div>`;
+    div.innerHTML = `<span class="who" style="color:${agentColor(id)}">[${name}]</span> ${toggleHtml}<div class="r-body">${linkifySample(escHtml(text))}</div>`;
     if(long){
       div.onclick = () => {
         div.dataset.ManualToggle = '1';
@@ -443,7 +485,7 @@ function addMsg(id, text, cls=''){
       };
     }
   } else {
-    div.innerHTML=`<span class="who" style="color:${agentColor(id)}">[${name}]</span> `+escHtml(text);
+    div.innerHTML=`<span class="who" style="color:${agentColor(id)}">[${name}]</span> `+linkifySample(escHtml(text));
   }
 
   if(agentFilter && id!==agentFilter) div.style.display='none';
@@ -493,26 +535,40 @@ function setRunning(v){
   if(runStatusEl) runStatusEl.textContent = v ? 'running…' : 'idle';
 }
 
-// After a run, if the team produced code, offer Download + Re-test in the report.
+// After a run, if the team produced code, offer Download + Re-test + Inspect sample.txt in the report.
 async function showCodeActions(){
   let info; try { info = await (await fetch('/api/code/info')).json(); } catch(e){ return; }
   document.getElementById('codeactions')?.remove();
   if(!info.has_code) return;
+  let lastRetestStdout = null;
   const bar=document.createElement('div'); bar.id='codeactions';
   bar.style.cssText='margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap';
   bar.innerHTML=`<span style="font-size:11px;color:var(--dim)">code by: ${info.agents.join(', ')}</span>`;
   const dl=document.createElement('button'); dl.textContent='⬇ Download code';
   dl.style.cssText='padding:6px 12px;font-size:12px';
   dl.onclick=()=>{ const a=document.createElement('a'); a.href='/api/code'; a.download='swarm_output.py'; a.click(); };
+  const sampleBtn=document.createElement('button'); sampleBtn.textContent='📄 Inspect /tmp/sample.txt';
+  sampleBtn.style.cssText='padding:6px 12px;font-size:12px';
+  sampleBtn.onclick=()=>openSampleModal(lastRetestStdout);
   const test=document.createElement('button'); test.textContent='▶ Re-test in sandbox';
   test.style.cssText='padding:6px 12px;font-size:12px';
+  const outBox=document.createElement('pre');
+  outBox.style.cssText='width:100%;margin:6px 0 0;padding:8px 10px;background:#080b11;border:1px solid var(--edge);border-radius:6px;font-size:11.5px;font-family:SF Mono,Consolas,monospace;white-space:pre-wrap;word-break:break-word;display:none;max-height:140px;overflow-y:auto';
+  outBox.className='scroll-pane';
   const res=document.createElement('span'); res.style.cssText='font-size:11px;font-family:SF Mono,Consolas,monospace';
   test.onclick=async()=>{ test.disabled=true; res.textContent=' running…';
     try{ const r=await (await fetch('/api/code/run',{method:'POST'})).json();
-      res.innerHTML = r.rc===0 ? `<span style="color:var(--nv)">✓ rc=0</span> ${escHtml((r.stdout||'').split('\n')[0].slice(0,80))}`
-                               : `<span style="color:#ff6b6b">rc=${r.rc}</span> ${escHtml((r.stdout||r.error||'').slice(0,80))}`;
+      lastRetestStdout = r.stdout || r.error || '';
+      res.innerHTML = r.rc===0
+        ? `<span style="color:var(--nv)">✓ rc=0</span> <span class="file-link" id="verify-sample-link">[verify vs sample.txt]</span>`
+        : `<span style="color:#ff6b6b">rc=${r.rc}</span>`;
+      const vlink = res.querySelector('#verify-sample-link');
+      if(vlink) vlink.onclick = () => openSampleModal(lastRetestStdout);
+      outBox.textContent = lastRetestStdout || '(no stdout)';
+      outBox.style.borderColor = r.rc===0 ? 'rgba(118,185,0,0.45)' : '#ff6b6b';
+      outBox.style.display = 'block';
     }catch(e){ res.textContent=' error'; } test.disabled=false; };
-  bar.append(dl, test, res);
+  bar.append(dl, sampleBtn, test, res, outBox);
   reportEl.appendChild(bar);
 }
 

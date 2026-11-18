@@ -141,12 +141,42 @@ async def get_code():
         "Content-Disposition": "attachment; filename=swarm_output.py"})
 
 
+@app.get("/api/sample")
+async def get_sample():
+    """Return the seeded /tmp/sample.txt content + reference word-frequency stats
+    so users can inspect the exact input file and verify the swarm's output."""
+    from collections import Counter
+    from orchestrator import SAMPLE_TEXT
+    words = [w.strip(".,!?;:\"'()[]{}").lower() for w in SAMPLE_TEXT.split()]
+    words = [w for w in words if w]
+    counts = Counter(words)
+    return JSONResponse({
+        "path": "/tmp/sample.txt",
+        "content": SAMPLE_TEXT,
+        "stats": {
+            "total_words": len(words),
+            "unique_words": len(counts),
+            "avg_word_length": round(sum(len(w) for w in words) / max(len(words), 1), 2),
+            "top_words": counts.most_common(10),
+        },
+    })
+
+
+@app.get("/api/sample.txt")
+async def get_sample_txt():
+    from fastapi.responses import PlainTextResponse
+    from orchestrator import SAMPLE_TEXT
+    return PlainTextResponse(SAMPLE_TEXT + "\n")
+
+
 @app.get("/api/code/info")
 async def code_info():
     from orchestrator import LAST_RUN
-    return JSONResponse({"task": LAST_RUN.get("task", ""),
+    task = LAST_RUN.get("task", "")
+    return JSONResponse({"task": task,
                          "agents": list(LAST_RUN.get("code", {}).keys()),
-                         "has_code": bool(LAST_RUN.get("code"))})
+                         "has_code": bool(LAST_RUN.get("code")),
+                         "uses_sample": "/tmp/sample.txt" in task or bool(LAST_RUN.get("code"))})
 
 
 @app.post("/api/code/run")
