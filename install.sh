@@ -174,6 +174,14 @@ for pair in "node1:SSH1" "node2:SSH2"; do
 done
 
 # ---- 4. download models ----------------------------------------------------
+# Pick up HF_TOKEN from the environment or ~/.bashrc if present (speeds up HF Hub downloads).
+if [[ -z "${HF_TOKEN:-}" ]]; then
+  HF_TOKEN=$(grep -E "^(export )?HF_TOKEN=" ~/.bashrc 2>/dev/null | tail -1 | sed -E "s/^(export )?HF_TOKEN=//; s/^[\"'\\'']//; s/[\"'\\'']$//" || true)
+fi
+if [[ -z "${HF_TOKEN:-}" ]]; then
+  HF_TOKEN=$(SSH1 'grep -E "^(export )?HF_TOKEN=" ~/.bashrc 2>/dev/null | tail -1 | sed -E "s/^(export )?HF_TOKEN=//; s/^[\"'\''\"]//; s/[\"'\''\"]$//"' 2>/dev/null || true)
+fi
+
 dl_model(){ local run="$1" node="$2" repo="$3" extra="${4:-}"
   local dir="models--${repo//\//--}"
   if $run "test -d $HF_CACHE/hub/$dir/snapshots && [ -n \"\$(ls -A $HF_CACHE/hub/$dir/snapshots 2>/dev/null)\" ]" 2>/dev/null; then
@@ -181,16 +189,26 @@ dl_model(){ local run="$1" node="$2" repo="$3" extra="${4:-}"
     return 0
   fi
   c_y "     … downloading $repo on $node"
-  $run "mkdir -p $HF_CACHE && sudo -n docker run --rm ${HF_TOKEN:+-e HF_TOKEN='$HF_TOKEN'} \
+  $run "mkdir -p $HF_CACHE && sudo -n docker run --rm --entrypoint bash ${HF_TOKEN:+-e HF_TOKEN='$HF_TOKEN'} \
     -v $HF_CACHE:/root/.cache/huggingface $VLLM_TAG \
-    bash -lc 'hf download $repo $extra >/dev/null 2>&1 && chown -R 1000:1000 /root/.cache/huggingface && echo ok'" 2>/dev/null | grep -q ok \
+    -lc 'hf download $repo $extra >/dev/null 2>&1 && chown -R 1000:1000 /root/.cache/huggingface && echo ok'" 2>/dev/null | grep -q ok \
     && c_g "     ✓ $node: $repo" || die "failed to download $repo on $node"
 }
 hr; c_b "4) Models (US/FR consolidated lineup)"
 dl_model SSH1 "node1" "$DEVSTRAL_REPO" "--ignore-patterns 'consolidated*'"
 dl_model SSH1 "node1" "$SUPERVISOR_REPO"
 if [[ "$CLUSTER_MODE" == "clustered" ]]; then
-  dl_model SSH2 "node2" "$SUPERVISOR_REPO"
+  local_sup_dir="models--${SUPERVISOR_REPO//\//--}"
+  if SSH2 "test -d $HF_CACHE/hub/$local_sup_dir/snapshots && [ -n \"\$(ls -A $HF_CACHE/hub/$local_sup_dir/snapshots 2>/dev/null)\" ]" 2>/dev/null; then
+    c_g "     ✓ node2: $SUPERVISOR_REPO (cached)"
+  else
+    c_y "     … syncing $SUPERVISOR_REPO from node1 → node2 over 200GbE CX7 (10.20.0.12)"
+    if SSH1 "tar -C $HF_CACHE/hub -cf - $local_sup_dir | ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new $SSHUSER@10.20.0.12 'mkdir -p $HF_CACHE/hub && tar -C $HF_CACHE/hub -xf -'" 2>/dev/null; then
+      c_g "     ✓ node2: $SUPERVISOR_REPO (synced over 200GbE CX7)"
+    else
+      dl_model SSH2 "node2" "$SUPERVISOR_REPO"
+    fi
+  fi
 fi
 dl_model SSH2 "node2" "$NANO30B_REPO"
 dl_model SSH2 "node2" "$GEMMA26B_REPO"
