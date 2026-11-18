@@ -195,6 +195,8 @@ if [[ "$CLUSTER_MODE" == "clustered" ]]; then
       && c_g "  ✓ 200GbE ConnectX-7 cluster configured ($NODE1 ↔ $NODE2)" \
       || die "setup-cluster.sh failed — check output above"
   fi
+  # Ensure Node 1's default ~/.ssh/id_ed25519 is trusted over the 10.20.0.12 RoCE IP as well
+  SSH1 "ssh-keyscan -t ed25519 10.20.0.12 >> ~/.ssh/known_hosts 2>/dev/null"
 fi
 
 # ---- 3. pull vLLM image on both nodes -------------------------------------
@@ -360,6 +362,9 @@ NEMOCLAW_ENV="export NEMOCLAW_PROVIDER=custom NEMOCLAW_ENDPOINT_URL=http://host.
 if ! SSH1 'bash -lc "command -v nemoclaw"' >/dev/null 2>&1; then
   c_y "  … installing nemoclaw/openshell on node1 (a few minutes)"
   SSH1 'test -d ~/.nvm && chmod -R g-w,o-w ~/.nvm' >/dev/null 2>&1
+  # Start a background watcher on node1 that kills any bundled nemoclaw-hf-download container
+  # as soon as nemoclaw.sh spawns it, so bootstrap finishes in ~45s instead of downloading a 35B model.
+  SSH1 'nohup bash -c "for _ in \$(seq 1 120); do sudo -n docker ps --format \"{{.Names}}\" 2>/dev/null | grep \"^nemoclaw-hf-download\" | xargs -r sudo -n docker rm -f >/dev/null 2>&1; sleep 2; done" >/dev/null 2>&1 < /dev/null &'
   SSH1 "bash -lc '$NEMOCLAW_ENV curl -fsSL -o /tmp/nemoclaw.sh https://www.nvidia.com/nemoclaw.sh && bash /tmp/nemoclaw.sh --non-interactive --yes-i-accept-third-party-software'" >/dev/null 2>&1
   if ! SSH1 'bash -lc "command -v nemoclaw"' >/dev/null 2>&1; then
     SSH1 'test -d ~/.nvm && chmod -R g-w,o-w ~/.nvm' >/dev/null 2>&1
