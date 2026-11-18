@@ -18,20 +18,46 @@ from orchestrator import Orchestrator
 app = FastAPI(title="Swarm Assembly")
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 
-# Preset tasks chosen to make the supervisor recruit *different* teams.
+# Preset tasks chosen to make the supervisor recruit *different* teams across both Sparks
+# and ensure every specialist (including Designer) gets prominent action.
 TASKS = [
     {"id": "analyze_logs", "title": "Analyze & Report",
-     "task": "Analyze this system's resource usage and write a short health report."},
+     "task": "Analyze this system's resource usage, design a clear status layout for "
+             "operators, and write a concise health report."},
     {"id": "build_tool", "title": "Build a Small Tool",
      "task": "Design, build, and test a small Python utility that summarizes a directory."},
-    {"id": "research_brief", "title": "Research Brief",
-     "task": "Research the tradeoffs of a topic and produce a concise, well-written brief."},
+    {"id": "design_cli_ux", "title": "Design Interactive CLI",
+     "task": "Research what operators need from a live DGX Spark cluster status card, "
+             "design an ergonomic ASCII/ANSI terminal dashboard layout with clear visual "
+             "hierarchy, implement a Python generator that prints it in the sandbox, and "
+             "document the UX guidelines."},
+    {"id": "api_ux_spec", "title": "API & UX Spec",
+     "task": "Architect a REST + WebSocket API for a local AI inference monitor, design "
+             "the user-facing dashboard layout and interaction states, review the spec for "
+             "usability and edge cases, and write a crisp developer handoff brief."},
+    {"id": "incident_rca", "title": "Incident Triage & RCA",
+     "task": "Triage a latency and memory spike on an inference cluster: write a Python "
+             "log/metric anomaly detector against /tmp/sample.txt, analyze the root cause "
+             "patterns, and write an executive Root Cause Analysis (RCA) with remediation steps."},
     {"id": "review_code", "title": "Review & Harden",
-     "task": "Review a code approach for correctness and risks, then propose tests."},
+     "task": "Review a code approach for correctness and risks, then propose and run tests."},
+    {"id": "security_audit", "title": "Security Audit & Patch",
+     "task": "Audit a Python token/config parser for security vulnerabilities (path "
+             "traversal, timing attacks, unsafe parsing), implement a hardened stdlib-only "
+             "version that processes /tmp/sample.txt, validate it with an exploit test suite, "
+             "re-review the patch, and write a short security advisory.",
+     "sequence": ["reviewer", "coder", "tester", "reviewer", "writer"]},
+    {"id": "benchmark_opt", "title": "Benchmark & Optimize",
+     "task": "Write a baseline Python text-indexing script over /tmp/sample.txt and measure "
+             "its execution time, analyze the performance bottlenecks, implement an optimized "
+             "version in the sandbox and compare before/after timings, verify output parity, "
+             "design a clean benchmark comparison table, and summarize the speedup.",
+     "sequence": ["coder", "analyst", "coder", "tester", "designer", "writer"]},
     {"id": "ship_feature", "title": "Ship a Mini Feature",
-     "task": "Design, build, test, review, fix, and document a small Python utility "
-             "that counts word frequencies in the text file at /tmp/sample.txt and prints the top 5.",
-     "sequence": ["architect", "coder", "tester", "reviewer", "coder", "writer"]},
+     "task": "Design, build, test, review, fix, polish the CLI UX, and document a small "
+             "Python utility that counts word frequencies in /tmp/sample.txt and prints a "
+             "cleanly formatted top-5 table.",
+     "sequence": ["architect", "designer", "coder", "tester", "reviewer", "coder", "writer"]},
     {"id": "data_pipeline", "title": "Build a Data Pipeline",
      "task": "Build a small Python data pipeline that reads /tmp/sample.txt, computes "
              "word-frequency statistics (total words, unique words, top-10, average word "

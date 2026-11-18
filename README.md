@@ -62,17 +62,21 @@ real GPU telemetry. Nothing is simulated.
 
 ## Demo tasks
 
-Click a button on the dashboard to run one. The first four let the supervisor
-**freely recruit** a 3–5 agent team; the last two are **scripted multi-round
+Click a button on the dashboard to run one. The first six let the supervisor
+**freely recruit** a 3–5 agent team; the last four are **scripted multi-round
 builds** with a fixed sequence.
 
 | Task | Type | What happens |
 |------|------|--------------|
-| **Analyze & Report** | free recruit | Supervisor assembles a small team to inspect the system's resource usage and write a short health report. Typically recruits Analyst + Coder + Writer. |
+| **Analyze & Report** | free recruit | Supervisor assembles a team to inspect the system's resource usage, design a status layout for operators, and write a concise health report. Typically recruits Analyst + Designer + Coder + Writer. |
 | **Build a Small Tool** | free recruit | Design, build, and test a small Python utility that summarizes a directory. Typically Architect + Coder + Tester. |
-| **Research Brief** | free recruit | Research the tradeoffs of a topic and produce a concise written brief. Typically Researcher + Analyst + Writer — spans both Sparks. |
-| **Review & Harden** | free recruit | Review a code approach for correctness/risks and propose tests. Typically Reviewer + Tester + Coder. |
-| **Ship a Mini Feature** | scripted, multi-round | Full mini-SDLC on a word-frequency utility reading `/tmp/sample.txt`. Sequence: **Architect → Coder → Tester → Reviewer → Coder (fix) → Writer**. The Coder runs twice — implement, then fix after the Reviewer's feedback. Real code executes each round. |
+| **Design Interactive CLI** | free recruit | Research what operators need from a live DGX Spark cluster status card, design an ergonomic ASCII/ANSI terminal dashboard layout, implement a Python generator in the sandbox, and document the UX guidelines. Typically Researcher + Designer + Coder + Writer. |
+| **API & UX Spec** | free recruit | Architect a REST + WebSocket API for a local AI inference monitor, design the user-facing dashboard layout and interaction states, review for usability, and write a developer handoff brief. Typically Architect + Designer + Reviewer + Writer. |
+| **Incident Triage & RCA** | free recruit | Triage a latency and memory spike on an inference cluster: write a Python log/metric anomaly detector against `/tmp/sample.txt`, analyze root cause patterns, and write an executive RCA. Typically Analyst + Coder + Researcher + Writer. |
+| **Review & Harden** | free recruit | Review a code approach for correctness/risks and propose and run tests. Typically Reviewer + Tester + Coder. |
+| **Security Audit & Patch** | scripted, multi-round | Audits a Python token/config parser for security vulnerabilities, implements a hardened stdlib-only version over `/tmp/sample.txt`, validates it with an exploit test suite, re-reviews the patch, and writes a security advisory. Sequence: **Reviewer → Coder → Tester → Reviewer → Writer**. |
+| **Benchmark & Optimize** | scripted, multi-round | Writes a baseline Python text-indexing script over `/tmp/sample.txt` and measures execution time, analyzes bottlenecks, implements an optimized version and compares before/after timings in the sandbox, verifies output parity, designs a benchmark comparison table, and summarizes the speedup. Sequence: **Coder → Analyst → Coder (optimize) → Tester → Designer → Writer**. |
+| **Ship a Mini Feature** | scripted, multi-round | Full mini-SDLC on a word-frequency utility reading `/tmp/sample.txt`. Sequence: **Architect → Designer → Coder → Tester → Reviewer → Coder (fix) → Writer**. The Coder runs twice — implement, then fix after the Reviewer's feedback. Real code executes each round. |
 | **Build a Data Pipeline** | scripted, multi-round | The **full-swarm showcase** — uses all 8 specialists. Builds a Python pipeline that reads `/tmp/sample.txt` and computes word stats (total/unique/top-10/avg length), validates, analyzes, designs the presentation, and documents. Sequence: **Researcher → Architect → Coder → Tester → Reviewer → Coder (fix) → Analyst → Designer → Writer**. Every specialist is recruited; the whole bench empties across both Sparks. |
 
 After a scripted build finishes, the report panel offers **⬇ Download code** (the
