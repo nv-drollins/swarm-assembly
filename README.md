@@ -81,6 +81,20 @@ the seeded sample and shows the real result).
 
 ---
 
+## Hardware Cabling (200GbE ConnectX-7 Direct Link — Mode 1)
+
+When using **Mode 1 (Clustered 200GbE Mode)**, connect the QSFP cable directly between the two DGX Sparks using the standard port pairing required by `setup-cluster.sh`:
+
+- **Node 1 (Spark 1) QSFP Port 0**  ──►  **Node 2 (Spark 2) QSFP Port 1**
+  - **QSFP Port 0** is the QSFP port physically **next to the RJ45 Ethernet jack** (`enp1s0f0np0` / `enP2p1s0f0np0`).
+  - **QSFP Port 1** is the outer QSFP port (`enp1s0f1np1` / `enP2p1s0f1np1`).
+- Each QSFP port exposes two PCIe/RoCEv2 paths (`10.20.0.11/24 ↔ 10.20.0.12/24` and `10.20.1.11/24 ↔ 10.20.1.12/24`, `MTU 9000`).
+- **Expected 200GbE RDMA bandwidth on the dashboard:**
+  - During `TP=2` token generation (`Nemotron-3-Super-120B-A12B-NVFP4`), each token requires small, ultra-low-latency tensor-parallel `AllReduce` synchronization across all 88 layers (~300–500 MB per response). On the dashboard's 1.2s telemetry poll, this shows up as **~50–250 MB/s (0.4–2.0 Gbps)** bursts during Supervisor thinking/synthesis (whereas a raw `nccl-tests` large-buffer `all_reduce_perf` benchmark saturates the dual paths at **~22–24 GB/s / ~180–195 Gbps**).
+- In **Mode 2 (Standard 1GbE Mode)**, the `⚡ 2× 200GbE CX7 RoCEv2 (TP=2)` bridge and `[120B TP=2 Shard]` tags are automatically hidden on the dashboard.
+
+---
+
 ## Quick start
 
 ```bash
