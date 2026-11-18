@@ -115,6 +115,11 @@ prep_node(){ # $1=label  $2=ssh-fn  $3=sudo-fn
      || $ssh 'sudo -n docker info 2>/dev/null | grep -qi "Runtimes:.*nvidia"'; then
     c_g "     ✓ nvidia docker runtime"
   else
+    if ! $ssh 'command -v nvidia-ctk >/dev/null 2>&1'; then
+      c_y "     … installing nvidia-container-toolkit"
+      $sudo_fn "DEBIAN_FRONTEND=noninteractive apt-get update -qq && \
+                DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nvidia-container-toolkit" >/dev/null 2>&1 || true
+    fi
     c_y "     … registering the NVIDIA container runtime with docker"
     $sudo_fn "nvidia-ctk runtime configure --runtime=docker --set-as-default" >/dev/null 2>&1 \
       && $sudo_fn "systemctl restart docker" >/dev/null 2>&1 \
