@@ -260,10 +260,10 @@ SSH2 "test -f $HF_CACHE/nano_v3_reasoning_parser.py || wget -q -O $HF_CACHE/nano
 # GPU memory budget on 121GB unified GB10 memory:
 #   Clustered Mode:
 #     Spark 1: 0.44 (Nemotron-3-Super-120B TP=2 shard) + 0.28 (Devstral-24B) = 0.72
-#     Spark 2: 0.44 (Nemotron-3-Super-120B TP=2 shard) + 0.19 (Nano-30B) + 0.18 (Gemma-4-26B) = 0.81
+#     Spark 2: 0.44 (Nemotron-3-Super-120B TP=2 shard) + 0.20 (Gemma-4-26B) + 0.18 (Nano-30B) = 0.82
 #   Standard Mode:
 #     Spark 1: 0.28 (Devstral-24B) + 0.25 (Nemotron-3.5-Lightning-30B) = 0.53
-#     Spark 2: 0.25 (Nano-30B) + 0.25 (Gemma-4-26B) = 0.50
+#     Spark 2: 0.25 (Gemma-4-26B) + 0.25 (Nano-30B) = 0.50
 # Always pass --enforce-eager on GB10 so PyTorch Inductor autotuning does not
 # wedge the GPU GSP during multi-container startup.
 wait_ready(){ local run="$1" name="$2" port="$3" cname="$4"
@@ -329,26 +329,26 @@ if [[ "$CLUSTER_MODE" == "clustered" ]]; then
           --enforce-eager >/dev/null"
     wait_ready SSH1 "$SUPERVISOR_NAME" "$SUPERVISOR_PORT" "vllm_super"
   fi
-  NANO_UTIL="0.19"
-  GEMMA_UTIL="0.18"
+  GEMMA_UTIL="0.20"
+  NANO_UTIL="0.18"
 else
   SSH1 "cd ~/spark-vllm-docker 2>/dev/null && ./launch-cluster.sh --name vllm_super stop >/dev/null 2>&1 || true"
   c_b "   node1 — Supervisor ($SUPERVISOR_NAME, single-node):"
   serve_solo SSH1 "$SUPERVISOR_NAME" "$SUPERVISOR_REPO" "$SUPERVISOR_PORT" 0.25 "--load-format instanttensor --reasoning-parser nemotron_v3"
-  NANO_UTIL="0.25"
   GEMMA_UTIL="0.25"
+  NANO_UTIL="0.25"
 fi
 
 c_b "   node1 — Coder & Tester ($DEVSTRAL_REPO on :8013):"
 serve_solo SSH1 "devstral-24b" "$DEVSTRAL_REPO" 8013 0.28 "--load-format instanttensor"
 
-c_b "   node2 — Researcher, Analyst, Reviewer & Designer ($NANO30B_REPO on :8011):"
-serve_solo SSH2 "nemotron-nano-30b" "$NANO30B_REPO" 8011 "$NANO_UTIL" \
-  "--moe-backend cutlass --load-format fastsafetensors --reasoning-parser-plugin /root/.cache/huggingface/nano_v3_reasoning_parser.py --reasoning-parser nano_v3"
-
 c_b "   node2 — Architect & Writer ($GEMMA26B_REPO on :8012):"
 serve_solo SSH2 "gemma4-26b" "$GEMMA26B_REPO" 8012 "$GEMMA_UTIL" \
   "--load-format instanttensor --reasoning-parser gemma4"
+
+c_b "   node2 — Researcher, Analyst, Reviewer & Designer ($NANO30B_REPO on :8011):"
+serve_solo SSH2 "nemotron-nano-30b" "$NANO30B_REPO" 8011 "$NANO_UTIL" \
+  "--moe-backend cutlass --load-format fastsafetensors --reasoning-parser-plugin /root/.cache/huggingface/nano_v3_reasoning_parser.py --reasoning-parser nano_v3"
 
 SSH2 "curl -s -o /dev/null -w '%{http_code}' --max-time 6 http://$NODE1:$SUPERVISOR_PORT/v1/models" 2>/dev/null | grep -q 200 \
   && c_g "  ✓ node2 can reach the supervisor on node1:$SUPERVISOR_PORT" \
