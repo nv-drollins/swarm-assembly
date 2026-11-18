@@ -224,7 +224,8 @@ fi
 
 dl_model(){ local run="$1" node="$2" repo="$3" exclude_glob="${4:-}"
   local dir="models--${repo//\//--}"
-  if $run "test -d $HF_CACHE/hub/$dir/snapshots && [ -n \"\$(ls -A $HF_CACHE/hub/$dir/snapshots 2>/dev/null)\" ]" 2>/dev/null; then
+  # Verify both that snapshots/ is non-empty AND that no symlinks inside snapshots/ are broken.
+  if $run "test -d $HF_CACHE/hub/$dir/snapshots && [ -n \"\$(ls -A $HF_CACHE/hub/$dir/snapshots 2>/dev/null)\" ] && [ -z \"\$(find -L $HF_CACHE/hub/$dir/snapshots -type l 2>/dev/null)\" ]" 2>/dev/null; then
     c_g "     ✓ $node: $repo (cached)"
     return 0
   fi
@@ -239,11 +240,12 @@ dl_model SSH1 "node1" "$DEVSTRAL_REPO" "consolidated*"
 dl_model SSH1 "node1" "$SUPERVISOR_REPO"
 if [[ "$CLUSTER_MODE" == "clustered" ]]; then
   local_sup_dir="models--${SUPERVISOR_REPO//\//--}"
-  if SSH2 "test -d $HF_CACHE/hub/$local_sup_dir/snapshots && [ -n \"\$(ls -A $HF_CACHE/hub/$local_sup_dir/snapshots 2>/dev/null)\" ]" 2>/dev/null; then
+  if SSH2 "test -d $HF_CACHE/hub/$local_sup_dir/snapshots && [ -n \"\$(ls -A $HF_CACHE/hub/$local_sup_dir/snapshots 2>/dev/null)\" ] && [ -z \"\$(find -L $HF_CACHE/hub/$local_sup_dir/snapshots -type l 2>/dev/null)\" ]" 2>/dev/null; then
     c_g "     ✓ node2: $SUPERVISOR_REPO (cached)"
   else
     c_y "     … syncing $SUPERVISOR_REPO from node1 → node2 over 200GbE CX7 (10.20.0.12)"
-    if SSH1 "tar -C $HF_CACHE/hub -cf - $local_sup_dir | ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new $SSHUSER@10.20.0.12 'mkdir -p $HF_CACHE/hub && tar -C $HF_CACHE/hub -xf -'" 2>/dev/null; then
+    # Use tar -chf (dereference symlinks) because HF Hub 1.x stores large xet tensors in ../../blobs/ outside the model dir.
+    if SSH1 "tar -C $HF_CACHE/hub -chf - $local_sup_dir | ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new $SSHUSER@10.20.0.12 'mkdir -p $HF_CACHE/hub && rm -rf $HF_CACHE/hub/$local_sup_dir && tar -C $HF_CACHE/hub -xf -'" 2>/dev/null; then
       c_g "     ✓ node2: $SUPERVISOR_REPO (synced over 200GbE CX7)"
     else
       dl_model SSH2 "node2" "$SUPERVISOR_REPO"
