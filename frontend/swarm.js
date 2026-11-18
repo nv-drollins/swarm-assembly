@@ -210,9 +210,9 @@ function drawNode(a){
   ctx.fillStyle='#fff';ctx.fillText(a.emoji,node.x,node.y+1);
   ctx.font=(node.sup?'600 12px':'11px')+' Segoe UI';ctx.fillStyle='#e6edf3';
   ctx.fillText(a.name,node.x,node.y+R+13);
-  // model tag (shows the specialist's own model)
-  if(a.model && !node.sup){
-    const mshort={'nemotron-lightning':'Nemotron-3.5-30B','coder':'Qwen3-Coder-30B','writer':'Nemotron-3-Nano-4B','analyst':'Nemotron-3-Nano-4B','architect':'Nemotron-3-Nano-4B','reviewer':'Nemotron-3-Nano-4B','tester':'Qwen3-Coder-30B','researcher':'Nemotron-3-Nano-4B','designer':'Nemotron-3-Nano-4B'}[a.model]||a.model;
+  // model tag (shows the specialist's or supervisor's model)
+  if(a.model){
+    const mshort={'nemotron-super':'Nemotron-3-Super-120B · TP=2 (200GbE)','nemotron-lightning':'Nemotron-3.5-Lightning-30B','devstral-24b':'Devstral-Small-2-24B','nemotron-nano-30b':'Nemotron-3-Nano-30B','gemma4-26b':'Gemma-4-26B-A4B'}[a.model]||a.model;
     ctx.font='9px SF Mono,Consolas,monospace'; ctx.fillStyle=rgba(col,0.85);
     ctx.fillText(mshort,node.x,node.y+R+25);
   }
@@ -313,6 +313,12 @@ async function showCodeActions(){
 async function boot(){
   const b=await (await fetch('/api/bench')).json();
   supervisor=b.supervisor; bench=b.bench; if(b.nodes) nodeHosts=b.nodes;
+  const badges=document.querySelectorAll('header .badge');
+  if(badges[1] && supervisor?.model){
+    badges[1].textContent = supervisor.clustered
+      ? 'Nemotron-3-Super-120B (TP=2 · 200GbE CX7) · 2× DGX Spark'
+      : 'Nemotron-3.5-Lightning-30B · 2× DGX Spark';
+  }
   resize();
   const tasks=await (await fetch('/api/tasks')).json();
   tasks.forEach(t=>{ const btn=document.createElement('button');

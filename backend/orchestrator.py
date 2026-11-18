@@ -152,7 +152,7 @@ class Orchestrator:
             max_tokens=6000, temperature=0.3,
         )
         if out["reasoning"]:
-            await self.emit("reasoning", {"agent": "supervisor", "text": out["reasoning"][:500]})
+            await self.emit("reasoning", {"agent": "supervisor", "text": out["reasoning"]})
         # parse first line of ids
         lines = [l.strip() for l in out["content"].splitlines() if l.strip()]
         ids, reasoning = [], ""
@@ -170,12 +170,11 @@ class Orchestrator:
         agent = BENCH_BY_ID[tid]
         await self._state(tid, "working")
         # Announce which specialized model + Spark this agent runs on.
-        model_short = {"nemotron-lightning": "Nemotron-3.5-Lightning-30B",
-                       "coder": "Qwen3-Coder-30B-A3B", "tester": "Qwen3-Coder-30B-A3B",
-                       "writer": "Nemotron-3-Nano-4B", "analyst": "Nemotron-3-Nano-4B",
-                       "architect": "Nemotron-3-Nano-4B", "reviewer": "Nemotron-3-Nano-4B",
-                       "researcher": "Nemotron-3-Nano-4B",
-                       "designer": "Nemotron-3-Nano-4B"}.get(agent["model"], agent["model"])
+        model_short = {"nemotron-super": "Nemotron-3-Super-120B (TP=2)",
+                       "nemotron-lightning": "Nemotron-3.5-Lightning-30B",
+                       "devstral-24b": "Devstral-Small-2-24B",
+                       "nemotron-nano-30b": "Nemotron-3-Nano-30B",
+                       "gemma4-26b": "Gemma-4-26B-A4B"}.get(agent["model"], agent["model"])
         await self._line(tid, f"running on {model_short} (Spark {agent['node']})\u2026")
         context = ""
         if prior:
@@ -189,7 +188,7 @@ class Orchestrator:
             base=agent["endpoint"], model=agent["model"],  # each specialist on its OWN model
         )
         if out["reasoning"]:
-            await self.emit("reasoning", {"agent": tid, "text": out["reasoning"][:300]})
+            await self.emit("reasoning", {"agent": tid, "text": out["reasoning"]})
         text = out["content"]
         # Coder/Tester run real code in the shared sandbox (execution roles).
         if ready and tid in ("coder", "tester"):

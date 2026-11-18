@@ -3,7 +3,7 @@
 A live, booth-ready **multi-agent swarm demo** for a **cluster of two NVIDIA DGX
 Sparks** (GB10). A supervisor agent reasons about a task, **dynamically recruits
 a team of specialists**, and assembles them into a shared NVIDIA Nemoclaw sandbox
-where they collaborate — each specialist running on **its own specialized model,
+where they collaborate — each specialist running on **its specialized model,
 spread across both Sparks**. When the task is done, the team disbands back to the
 bench.
 
@@ -14,22 +14,16 @@ real GPU telemetry. Nothing is simulated.
 
 ## What it shows
 
-- **Dynamic team assembly** — the supervisor (Nemotron 3.5 Lightning 30B) reads
-  the task and recruits only the specialists it needs from a bench of 8.
-- **A model per specialist, across two Sparks** — 9 distinct model servers run
-  concurrently (supervisor + 8 specialists), split across the cluster. You can
-  *see* the compute load move between the two nodes.
-- **Real collaboration** — recruited agents relay in a shared sandbox, each
-  building on prior teammates' output; the Coder and Tester run **real Python**.
-- **Multi-round builds** — a specialist can be recruited more than once (e.g. the
-  Coder implements, then fixes after the Reviewer's feedback).
-- **Live per-Spark telemetry** — GPU %, memory, temperature, power for each node,
-  updating ~1 Hz. The working Spark visibly lights up.
-- **Inspect any agent** — click an active agent to filter the log to just what it
-  is doing/thinking. Log lines are colored by Spark (green = Spark 1, purple =
-  Spark 2, teal = Supervisor).
-- **Download & re-test** — grab the code the swarm wrote, and re-run it in the
-  sandbox from the UI.
+- **Two selectable cluster modes at install time:**
+  - **Mode 1 — Clustered 200GbE Mode (default):** The Supervisor runs **`nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`**, sharded `TP=2` across Spark 1 and Spark 2 over the **2× 200GbE ConnectX-7 RoCEv2** direct link using Ray + RDMA.
+  - **Mode 2 — Standard 1GbE Mode:** The Supervisor runs **`nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4`** on Spark 1 with no 200GbE cable required.
+- **Consolidated 24B–30B US/FR specialist servers** — instead of 8 tiny 4B containers, specialists share 3 high-capacity 24B–30B vLLM servers across the two Sparks (Mistral `Devstral-Small-2-24B` in FP8, NVIDIA `Nemotron-3-Nano-30B` in NVFP4, and Google/NVIDIA `Gemma-4-26B-A4B` in NVFP4).
+- **Dynamic team assembly** — the supervisor reads the task and recruits only the specialists it needs from a bench of 8.
+- **Real collaboration** — recruited agents relay in a shared sandbox, each building on prior teammates' output; the Coder and Tester run **real Python**.
+- **Multi-round builds** — a specialist can be recruited more than once (e.g. the Coder implements, then fixes after the Reviewer's feedback).
+- **Live per-Spark telemetry** — GPU %, memory, temperature, power for each node, updating ~1 Hz.
+- **Inspect any agent** — click an active agent node to filter the log to just what it is doing/thinking (with full, uncapped `💭` reasoning traces). Log lines are colored by Spark (green = Spark 1, purple = Spark 2, teal = Supervisor).
+- **Download & re-test** — grab the code the swarm wrote, and re-run it in the sandbox from the UI.
 
 ---
 
@@ -42,55 +36,27 @@ real GPU telemetry. Nothing is simulated.
                           orchestrator · approval · telemetry · WS
                                         │
          ┌──────────────────────────────┴──────────────────────────────┐
-         │                                                              │
-   SPARK 1 (node1)                                              SPARK 2 (node2)
-   ├─ :8001  Supervisor  Nemotron-3.5-Lightning-30B-NVFP4     ├─ :8011 Analyst    Nemotron-3-Nano-4B-FP8
-   ├─ :8013  Coder       Qwen3-Coder-30B-A3B-FP8               ├─ :8012 Writer     Nemotron-3-Nano-4B-FP8
-   ├─ :8017  Researcher  Nemotron-3-Nano-4B-FP8                ├─ :8014 Architect  Nemotron-3-Nano-4B-FP8
-   ├─ :8018  Designer    Nemotron-3-Nano-4B-FP8                ├─ :8015 Tester     Qwen3-Coder-30B-A3B-FP8
-   └─ Nemoclaw/OpenShell sandbox  (shared "swarm-team")        └─ :8016 Reviewer   Nemotron-3-Nano-4B-FP8
+         │                 2× 200GbE ConnectX-7 (RoCEv2)               │
+   SPARK 1 (node1) ◄══════════════════ TP=2 ══════════════════► SPARK 2 (node2)
+   ├─ :8001  Supervisor  Nemotron-3-Super-120B-NVFP4 (TP=2 shard 0)  ├─ (TP=2 shard 1 of Supervisor)
+   │         (or Nemotron-3.5-Lightning-30B-NVFP4 in Standard Mode)  ├─ :8011  Nemotron-3-Nano-30B-NVFP4
+   ├─ :8013  Devstral-Small-2-24B-Instruct-2512 (FP8)                │         (Researcher, Analyst, Reviewer, Designer)
+   │         (Coder, Tester)                                         └─ :8012  Gemma-4-26B-A4B-NVFP4
+   └─ Nemoclaw/OpenShell sandbox  (shared "swarm-team")                        (Architect, Writer)
 ```
 
-- Each model is served by its own **vLLM** container (NVIDIA vLLM image), pinned to
-  a tight `--gpu-memory-utilization` so many coexist on a single GB10's unified memory.
-- Recruited specialists share **one** Nemoclaw sandbox (`swarm-team`) — the "team in
-  one workspace" model. Code execution happens there; a sample input file
-  (`/tmp/sample.txt`) is seeded so file-based utilities have real data.
+- All models run on the DGX Spark-optimized **`eugr/spark-vllm:latest`** (`vllm-node`) container with `instanttensor` / `fastsafetensors` weight loading and FlashInfer/CUTLASS Blackwell (`sm_121a`) kernels.
+- Recruited specialists share **one** Nemoclaw sandbox (`swarm-team`) — the "team in one workspace" model. Code execution happens there; a sample input file (`/tmp/sample.txt`) is seeded so file-based utilities have real data.
 - Node IPs are **not hardcoded** — the backend reads `SWARM_NODE1` / `SWARM_NODE2`.
 
-### The bench — 8 specialists, one model each
+### The bench — 8 specialists across 4 shared model servers
 
-| Agent | Role | Model | Spark | Port |
-|-------|------|-------|:-----:|:----:|
-| **Supervisor** | Task decomposition & team assembly | Nemotron-3.5-Lightning-**30B**-A3B (NVFP4) | 1 | 8001 |
-| **Researcher** | Gather facts & context | Nemotron-3-Nano-**4B** (FP8) | 1 | 8017 |
-| **Coder** | Write & run code | **Qwen3-Coder-30B-A3B** (FP8) | 1 | 8013 |
-| **Designer** | UX / presentation of output | Nemotron-3-Nano-**4B** (FP8) | 1 | 8018 |
-| **Analyst** | Data analysis & insights | Nemotron-3-Nano-**4B** (FP8) | 2 | 8011 |
-| **Architect** | System design & structure | Nemotron-3-Nano-**4B** (FP8) | 2 | 8014 |
-| **Writer** | Documentation & prose | Nemotron-3-Nano-**4B** (FP8) | 2 | 8012 |
-| **Reviewer** | Code review & risk | Nemotron-3-Nano-**4B** (FP8) | 2 | 8016 |
-| **Tester** | Test design & validation | **Qwen3-Coder-30B-A3B** (FP8) | 2 | 8015 |
-
-*Model choices: NVIDIA Nemotron for every reasoning, analysis, design and writing
-role; Qwen3-Coder for the two code-execution roles (there is no comparable open
-coder model in the Nemotron family). Quantized throughout — NVFP4 for the 30B
-supervisor, FP8 elsewhere, both native on Blackwell.*
-
-*Why a 30B MoE for the Coder: Qwen3-Coder-30B-A3B activates only 3B parameters
-per token, so it answers at roughly 4B-class speed while coding far better than
-the 7B dense model it replaces. GB10's 121GB of unified memory has room for it.*
-
-### Lifecycle of a task
-
-1. **Recruit** — supervisor picks the team (either by reasoning, or a fixed
-   sequence for the scripted builds).
-2. **Assemble** — the recruited team spins up into the shared sandbox; idle agents
-   animate from the bench into their Spark's work zone.
-3. **Relay** — each teammate works in turn on its own model, seeing prior
-   teammates' output; Coder/Tester execute real Python in the sandbox.
-4. **Synthesize** — the supervisor stitches the team's work into a final result.
-5. **Disband** — the workspace is cleared and agents return to the bench.
+| Agent(s) | Role | Model | Origin | Served On | Port |
+|----------|------|-------|--------|:---------:|:----:|
+| **Supervisor** | Task decomposition & team assembly | **Nemotron-3-Super-120B-A12B** (NVFP4, `TP=2`) *(or Nemotron-3.5-Lightning-30B in Standard mode)* | NVIDIA (US) | Spark 1 + 2 (`TP=2`) | 8001 |
+| **Coder**, **Tester** | Write, run & validate Python in sandbox | **Devstral-Small-2-24B-Instruct-2512** (FP8) | Mistral (FR) | Spark 1 | 8013 |
+| **Researcher**, **Analyst**, **Reviewer**, **Designer** | Research, data analysis, code review, UX | **Nemotron-3-Nano-30B-A3B** (NVFP4) | NVIDIA (US) | Spark 2 | 8011 |
+| **Architect**, **Writer** | System design, documentation & prose | **Gemma-4-26B-A4B** (NVFP4) | Google / NVIDIA (US) | Spark 2 | 8012 |
 
 ---
 
@@ -115,72 +81,31 @@ the seeded sample and shows the real result).
 
 ---
 
-## Prerequisites
-
-- **Two DGX Sparks (GB10)** on the same network, reachable from each other by SSH.
-  A stock DGX OS image is enough — `install.sh` does the rest.
-- Your SSH key installed on both nodes, **and** node 1's key installed on node 2
-  (the backend polls Spark 2's telemetry over SSH from node 1).
-- ~60GB free on node 1 and ~40GB on node 2 for the model cache, plus ~39GB each
-  for the vLLM container image.
-- **No HuggingFace token needed** — all three checkpoints are ungated.
-
-`install.sh` handles everything else, and is safe to re-run:
-
-| Installs / configures | Why |
-|---|---|
-| `python3-venv`, `python3-pip` | the FastAPI backend's venv |
-| NVIDIA container runtime (`nvidia-ctk runtime configure`) | a fresh DGX image ships Docker and the toolkit but doesn't wire them together — containers can't see the GPU until this runs |
-| the user's `docker` group membership | so later steps don't all need `sudo` |
-| NGC vLLM image, model checkpoints | the 9 model endpoints |
-| nemoclaw / openshell + the `swarm-team` sandbox | real code execution for Coder/Tester |
-
-It does **not** assume specific IPs or passwordless sudo: every privileged step
-is tried with `sudo -n` first, and prints the exact command for you if that fails.
-
-### Networking
-
-The two Sparks only exchange small OpenAI-format JSON requests plus a 1 Hz SSH
-telemetry poll. Each model loads entirely on one GB10 — there is no tensor
-parallelism and no NCCL traffic. **Plain 1GbE is fine**; the ConnectX-7 200GbE
-ports do not need to be configured for this demo.
-
----
-
 ## Quick start
 
 ```bash
 # On node 1 (the backend host), from the repo root:
-./install.sh              # prompts for the two node hostnames + SSH user, installs
-                          # prerequisites, pulls the vLLM image, downloads models,
-                          # serves all 9 endpoints across both Sparks, provisions
-                          # the sandbox. No HF token required.
+./install.sh              # prompts for node 1 + node 2 hostnames, SSH user, and
+                          # Mode 1 (Clustered 200GbE 120B TP=2) vs Mode 2 (Standard 1GbE 30B).
+                          # Configures CX7 networking (Mode 1), pulls vllm-node,
+                          # downloads models, starts all servers, provisions sandbox,
+                          # and writes .swarm.env.
 
 # then launch the dashboard (also on node 1):
-SWARM_NODE1=<node1-host> SWARM_NODE2=<node2-host> ./run.sh
+./run.sh
 # open http://<node1-host>:4456
 ```
-
-First run downloads ~39GB of container image and ~60GB of weights per node, so
-budget an hour on a decent link. Afterwards everything is cached and
-`install.sh` re-runs in under a minute, restarting only what isn't up.
-
-Prefer **hostnames** over IPs — they survive a venue's DHCP.
-
-`run.sh` creates a venv, installs Python deps, and serves the dashboard on `:4456`.
 
 ### Environment variables
 
 | Var | Default | Purpose |
 |-----|---------|---------|
-| `SWARM_NODE1` | *(required)* | host of Spark 1 (supervisor, coder, researcher, designer + backend + sandbox) |
-| `SWARM_NODE2` | *(required)* | host of Spark 2 (analyst, writer, architect, tester, reviewer) |
+| `SWARM_NODE1` | *(from `.swarm.env` or required)* | host of Spark 1 (supervisor head, Devstral-24B coder/tester, backend, sandbox) |
+| `SWARM_NODE2` | *(from `.swarm.env` or required)* | host of Spark 2 (supervisor worker shard, Nano-30B, Gemma-4-26B) |
+| `SWARM_CLUSTER_MODE` | `clustered` | `clustered` (`Nemotron-3-Super-120B` `TP=2` over 200GbE) or `standard` (`Nemotron-3.5-Lightning-30B`) |
 | `SWARM_SSH_USER` | `nvidia` | SSH user used for telemetry polling |
 | `SWARM_VLLM_BASE` | `http://$SWARM_NODE1:8001/v1` | supervisor model endpoint |
-| `SWARM_MODEL` | `nemotron-lightning` | supervisor served-model name |
-
-Both node vars are **required** — the repo carries no site-specific addresses, so
-there is nothing stale to discover at a venue.
+| `SWARM_MODEL` | `nemotron-super` (or `nemotron-lightning`) | supervisor served-model name |
 
 ---
 
@@ -197,7 +122,7 @@ backend/
 frontend/
   index.html       dashboard shell
   swarm.js         canvas: two Spark zones, assembly animation, telemetry, log
-install.sh         prereq checks + model/endpoint/sandbox provisioning
+install.sh         prereq checks + CX7 cluster setup + model/endpoint/sandbox provisioning
 run.sh             venv + launch backend on :4456
 ```
 

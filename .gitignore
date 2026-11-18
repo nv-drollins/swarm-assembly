@@ -5,6 +5,7 @@ __pycache__/
 
 # Runtime / scratch
 *.log
+.swarm.env
 
 # Scratch & debug scripts (not part of the app)
 e2e*.py
