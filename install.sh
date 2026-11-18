@@ -356,33 +356,28 @@ SSH2 "curl -s -o /dev/null -w '%{http_code}' --max-time 6 http://$NODE1:$SUPERVI
 
 # ---- 6. shared Nemoclaw sandbox on node1 ----------------------------------
 hr; c_b "6) Shared sandbox (node1)"
-if ! SSH1 'bash -lc "command -v nemoclaw" >/dev/null 2>&1'; then
+NEMOCLAW_ENV="export NEMOCLAW_PROVIDER=custom NEMOCLAW_ENDPOINT_URL=http://host.openshell.internal:$SUPERVISOR_PORT/v1 NEMOCLAW_MODEL=$SUPERVISOR_NAME COMPATIBLE_API_KEY=dummy NEMOCLAW_YES=1 NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 NEMOCLAW_PREFERRED_API=openai-completions NEMOCLAW_SANDBOX_NAME=swarm-team;"
+if ! SSH1 'bash -lc "command -v nemoclaw"' >/dev/null 2>&1; then
   c_y "  … installing nemoclaw/openshell on node1 (a few minutes)"
   SSH1 'test -d ~/.nvm && chmod -R g-w,o-w ~/.nvm' >/dev/null 2>&1
-  SSH1 "bash -lc 'curl -fsSL -o /tmp/nemoclaw.sh https://www.nvidia.com/nemoclaw.sh && \
-        NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash /tmp/nemoclaw.sh'" >/dev/null 2>&1
-  if ! SSH1 'bash -lc "command -v nemoclaw" >/dev/null 2>&1'; then
+  SSH1 "bash -lc '$NEMOCLAW_ENV curl -fsSL -o /tmp/nemoclaw.sh https://www.nvidia.com/nemoclaw.sh && bash /tmp/nemoclaw.sh --non-interactive --yes-i-accept-third-party-software'" >/dev/null 2>&1
+  if ! SSH1 'bash -lc "command -v nemoclaw"' >/dev/null 2>&1; then
     SSH1 'test -d ~/.nvm && chmod -R g-w,o-w ~/.nvm' >/dev/null 2>&1
-    SSH1 "bash -lc 'NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash /tmp/nemoclaw.sh'" >/dev/null 2>&1
+    SSH1 "bash -lc '$NEMOCLAW_ENV bash /tmp/nemoclaw.sh --non-interactive --yes-i-accept-third-party-software'" >/dev/null 2>&1
   fi
-  SSH1 'bash -lc "command -v nemoclaw" >/dev/null 2>&1' \
+  SSH1 'bash -lc "command -v nemoclaw"' >/dev/null 2>&1 \
     && c_g "  ✓ nemoclaw installed" \
     || c_y "  ! nemoclaw install failed — run on node1:
       chmod -R g-w,o-w ~/.nvm 2>/dev/null
       curl -fsSL https://www.nvidia.com/nemoclaw.sh | NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash"
   SSH1 'sudo -n docker ps --format "{{.Names}}" 2>/dev/null | grep "^nemoclaw-hf-download" \
-        | xargs -r sudo -n docker rm -f' >/dev/null 2>&1 \
-    && c_y "  … stopped nemoclaw's unused bundled-model download"
+        | xargs -r sudo -n docker rm -f' >/dev/null 2>&1
 fi
 if SSH1 'bash -lc "command -v nemoclaw"' >/dev/null 2>&1; then
   if SSH1 'bash -lc "openshell sandbox list 2>/dev/null | grep -q \"swarm-team.*Ready\""'; then
     c_g "  ✓ swarm-team sandbox ready"
   else
-    SSH1 "bash -lc '
-      export NEMOCLAW_PROVIDER=custom NEMOCLAW_ENDPOINT_URL=http://host.openshell.internal:$SUPERVISOR_PORT/v1 \
-             NEMOCLAW_MODEL=$SUPERVISOR_NAME COMPATIBLE_API_KEY=dummy NEMOCLAW_YES=1 \
-             NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 NEMOCLAW_PREFERRED_API=openai-completions
-      nemoclaw onboard --non-interactive --yes --yes-i-accept-third-party-software --name swarm-team --no-gpu --no-sandbox-gpu >/dev/null 2>&1'"
+    SSH1 "bash -lc '$NEMOCLAW_ENV nemoclaw onboard --fresh --non-interactive --yes --yes-i-accept-third-party-software --name swarm-team --no-gpu --no-sandbox-gpu >/dev/null 2>&1'"
     SSH1 'bash -lc "openshell sandbox list 2>/dev/null | grep -q \"swarm-team.*Ready\""' \
       && c_g "  ✓ swarm-team sandbox ready" \
       || c_y "  ! sandbox provisioning needs attention (check nemoclaw on node1)"
