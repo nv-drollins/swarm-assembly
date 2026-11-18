@@ -222,7 +222,7 @@ if [[ -z "${HF_TOKEN:-}" ]]; then
   HF_TOKEN=$(SSH1 'grep -E "^(export )?HF_TOKEN=" ~/.bashrc 2>/dev/null | tail -1 | sed -E "s/^(export )?HF_TOKEN=//; s/^[\"'\''\"]//; s/[\"'\''\"]$//"' 2>/dev/null || true)
 fi
 
-dl_model(){ local run="$1" node="$2" repo="$3" extra="${4:-}"
+dl_model(){ local run="$1" node="$2" repo="$3" exclude_glob="${4:-}"
   local dir="models--${repo//\//--}"
   if $run "test -d $HF_CACHE/hub/$dir/snapshots && [ -n \"\$(ls -A $HF_CACHE/hub/$dir/snapshots 2>/dev/null)\" ]" 2>/dev/null; then
     c_g "     ✓ $node: $repo (cached)"
@@ -231,11 +231,11 @@ dl_model(){ local run="$1" node="$2" repo="$3" extra="${4:-}"
   c_y "     … downloading $repo on $node"
   $run "mkdir -p $HF_CACHE && sudo -n docker run --rm --entrypoint bash ${HF_TOKEN:+-e HF_TOKEN='$HF_TOKEN'} \
     -v $HF_CACHE:/root/.cache/huggingface $VLLM_TAG \
-    -lc 'hf download $repo $extra >/dev/null 2>&1 && chown -R 1000:1000 /root/.cache/huggingface && echo ok'" 2>/dev/null | grep -q ok \
+    -lc \"hf download $repo ${exclude_glob:+--exclude '$exclude_glob'} && chown -R 1000:1000 /root/.cache/huggingface\"" \
     && c_g "     ✓ $node: $repo" || die "failed to download $repo on $node"
 }
 hr; c_b "4) Models (US/FR consolidated lineup)"
-dl_model SSH1 "node1" "$DEVSTRAL_REPO" "--ignore-patterns 'consolidated*'"
+dl_model SSH1 "node1" "$DEVSTRAL_REPO" "consolidated*"
 dl_model SSH1 "node1" "$SUPERVISOR_REPO"
 if [[ "$CLUSTER_MODE" == "clustered" ]]; then
   local_sup_dir="models--${SUPERVISOR_REPO//\//--}"
