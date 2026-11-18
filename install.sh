@@ -180,6 +180,12 @@ if [[ "$CLUSTER_MODE" == "clustered" ]]; then
   N2_IP=$(SSH1 "getent ahostsv4 $NODE2 | awk 'NR==1{print \$1}'" 2>/dev/null)
   N1_IP="${N1_IP:-$NODE1}"
   N2_IP="${N2_IP:-$NODE2}"
+  # Pre-populate ~/.ssh/known_hosts on both nodes with both hostnames and resolved IPs
+  # so setup-cluster.sh's strict host-key check never fails when you used hostnames in Step 1.
+  SSH1 "mkdir -p ~/.ssh && ssh-keygen -f ~/.ssh/known_hosts -R $N1_IP -R $N2_IP >/dev/null 2>&1 || true; \
+        ssh-keyscan -t ed25519 $NODE1 $NODE2 $N1_IP $N2_IP >> ~/.ssh/known_hosts 2>/dev/null"
+  SSH2 "mkdir -p ~/.ssh && ssh-keygen -f ~/.ssh/known_hosts -R $N1_IP -R $N2_IP >/dev/null 2>&1 || true; \
+        ssh-keyscan -t ed25519 $NODE1 $NODE2 $N1_IP $N2_IP >> ~/.ssh/known_hosts 2>/dev/null"
   SSH1 "test -d ~/spark-vllm-docker || git clone -q https://github.com/eugr/spark-vllm-docker.git ~/spark-vllm-docker"
   if SSH1 "cd ~/spark-vllm-docker && ./setup-cluster.sh --doctor --dry-run >/dev/null 2>&1"; then
     c_g "  ✓ 200GbE ConnectX-7 cluster & RoCEv2 links verified ($NODE1 ↔ $NODE2)"
