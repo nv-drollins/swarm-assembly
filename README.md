@@ -99,20 +99,74 @@ When using **Mode 1 (Clustered 200GbE Mode)**, connect the QSFP cable directly b
 
 ---
 
-## Quick start
+## Quick start (Fresh Install on Two DGX Sparks)
+
+Run all steps below **on Node 1 (Spark 1)** logged in as `nvidia`. You can use either `.local` hostnames (e.g. `spark-6b64.local` / `spark-ae2c.local`, recommended for venue DHCP resilience) or static/LAN IP addresses (e.g. `192.168.1.159` / `192.168.1.188`).
+
+### 1. Generate & Authorize SSH Keys (on Node 1)
+
+`install.sh` and the live telemetry poller SSH into both Node 1 (itself) and Node 2. Generate an Ed25519 key on Node 1 and copy it to **both** nodes:
 
 ```bash
-# On node 1 (the backend host), from the repo root:
-./install.sh              # prompts for node 1 + node 2 hostnames, SSH user, and
-                          # Mode 1 (Clustered 200GbE 120B TP=2) vs Mode 2 (Standard 1GbE 30B).
-                          # Configures CX7 networking (Mode 1), pulls vllm-node,
-                          # downloads models, starts all servers, provisions sandbox,
-                          # and writes .swarm.env.
+# On Node 1:
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
 
-# then launch the dashboard (also on node 1):
-./run.sh
-# open http://<node1-host>:4456
+# Authorize on Node 1 itself:
+ssh-copy-id -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_ed25519.pub nvidia@<node1-host-or-ip>
+
+# Authorize on Node 2:
+ssh-copy-id -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_ed25519.pub nvidia@<node2-host-or-ip>
 ```
+
+### 2. Optional: Export a Hugging Face Token (on Node 1)
+
+All models in the roster are **ungated**, so no token is strictly required. However, exporting a read token prevents Hugging Face Hub rate-limiting during the initial ~135 GB model download:
+
+```bash
+export HF_TOKEN=hf_...
+```
+*(Or add `export HF_TOKEN=hf_...` to `~/.bashrc` on Node 1 — `install.sh` detects it automatically.)*
+
+### 3. Clone & Run `./install.sh` (on Node 1)
+
+```bash
+git clone https://github.com/nv-drollins/swarm-assembly.git
+cd swarm-assembly
+./install.sh
+```
+
+What `./install.sh` prompts for and automates:
+1. **Node 1 host, Node 2 host, and SSH user** (defaults to `nvidia`).
+2. **Mode selection:**
+   - **`1` — Clustered 200GbE Mode (default):** Configures the 200GbE ConnectX-7 RoCEv2 link via `spark-vllm-docker/setup-cluster.sh` and serves `NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` sharded `TP=2` across Spark 1 + Spark 2.
+   - **`2` — Standard 1GbE Mode:** Uses plain 1GbE LAN and serves `NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` on Spark 1.
+3. **One-time sudo password prompt (on freshly imaged Sparks):** If `sudo` requires a password, `install.sh` prompts once in memory and configures passwordless sudo (`/etc/sudoers.d/90-nvidia-nopasswd`) on both nodes so all Docker/runtime/netplan steps run unattended.
+4. **Host prerequisites & containers:** Installs `python3-venv` and `nvidia-container-toolkit` (if missing), registers the NVIDIA Docker runtime, adds `nvidia` to the `docker` group, pulls `eugr/spark-vllm:latest` (`vllm-node`), downloads models (syncing the 75 GB 120B checkpoint from Node 1 to Node 2 over the 200GbE link in Mode 1), starts all 4 model servers in largest-first memory order, provisions the `swarm-team` NemoClaw sandbox, saves `.swarm.env`, and **starts the dashboard in the background on `:4456`**.
+
+Open **`http://<node1-host-or-ip>:4456`** in your browser.
+
+---
+
+## Bringing Everything Back Online After a Reboot (`./run.sh`)
+
+If you power down or reboot both DGX Sparks, **you only need to run one command on Node 1** once they boot back up:
+
+```bash
+cd ~/swarm-assembly
+./run.sh
+```
+
+### What happens under the hood after a reboot?
+- In **Clustered 200GbE Mode**, the `TP=2` Supervisor (`vllm_super` on `:8001`) spans both nodes via Ray (`--rm`), so it does not auto-start across nodes on boot — whereas the solo specialist containers (`--restart unless-stopped`) *do* auto-start on boot.
+- Because GB10 uses 121 GB of unified memory, starting the smaller specialist containers before the 120B `TP=2` Supervisor would leave too little contiguous memory for the 120B shard.
+- **`./run.sh` handles this automatically:**
+  1. It reads `.swarm.env` (saved by `install.sh`) and checks if `:8001` (the Supervisor) is responding.
+  2. If `:8001` is offline (e.g. after a reboot), `./run.sh` automatically stops any auto-started `spec-*` containers on both Sparks and runs **`./install.sh --resume`** (non-interactive, zero prompts, using your saved `.swarm.env` settings).
+  3. `./install.sh --resume` verifies the 200GbE CX7 link, starts the 120B `TP=2` Supervisor (`:8001`) first while GPU memory is uncontended, starts the 3 specialist servers (`:8013, :8012, :8011`), verifies the `swarm-team` sandbox, and launches the `:4456` web dashboard in the background.
+- If all model servers are already up and you just want to restart/stop the web dashboard:
+  - `./run.sh` — restarts the web dashboard in the background (logs to `/tmp/swarm-web.log`).
+  - `./run.sh --stop` — stops the background web dashboard.
+  - `./run.sh --fg` — runs the web dashboard in the foreground.
 
 ### Environment variables
 

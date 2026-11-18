@@ -44,31 +44,48 @@ SUPERVISOR_PORT=8001
 # ---- 0. inputs -------------------------------------------------------------
 c_b "🐝 Swarm Assembly installer"
 hr
-c_y "This provisions model endpoints across two DGX Sparks."
-c_y "Use hostnames where you can — they survive a venue's DHCP; IPs do not."
-read -rp "Node 1 host (backend + supervisor + coder + sandbox): " NODE1
-[[ -n "$NODE1" ]] || die "node 1 host is required"
-read -rp "Node 2 host (specialist farm): " NODE2
-[[ -n "$NODE2" ]] || die "node 2 host is required"
-read -rp "SSH user for both nodes (default nvidia): " SSHUSER
-SSHUSER="${SSHUSER:-nvidia}"
-
-echo ""
-c_b "Select Supervisor / Interconnect Mode:"
-echo "  1) Clustered 200GbE Mode (default) — Nemotron-3-Super-120B-A12B-NVFP4 sharded TP=2"
-echo "     across Spark 1 + Spark 2 over the 200GbE ConnectX-7 direct QSFP cable"
-echo "  2) Standard 1GbE Mode              — Nemotron-3.5-Lightning-30B-A3B-NVFP4 on Spark 1"
-read -rp "Mode [1/2, default 1]: " MODE_CHOICE
-if [[ "${MODE_CHOICE:-1}" == "2" ]]; then
-  CLUSTER_MODE="standard"
-  SUPERVISOR_REPO="nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4"
-  SUPERVISOR_NAME="nemotron-lightning"
+if [[ "${1:-}" == "--resume" ]] && [[ -f .swarm.env ]]; then
+  # shellcheck disable=SC1091
+  set -a; source .swarm.env; set +a
+  NODE1="$SWARM_NODE1"
+  NODE2="$SWARM_NODE2"
+  SSHUSER="${SWARM_SSH_USER:-nvidia}"
+  CLUSTER_MODE="${SWARM_CLUSTER_MODE:-clustered}"
+  if [[ "$CLUSTER_MODE" == "standard" ]]; then
+    SUPERVISOR_REPO="nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4"
+    SUPERVISOR_NAME="nemotron-lightning"
+  else
+    SUPERVISOR_REPO="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+    SUPERVISOR_NAME="nemotron-super"
+  fi
+  c_g "  → Resuming from .swarm.env: node1=$NODE1  node2=$NODE2  mode=$CLUSTER_MODE"
 else
-  CLUSTER_MODE="clustered"
-  SUPERVISOR_REPO="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
-  SUPERVISOR_NAME="nemotron-super"
+  c_y "This provisions model endpoints across two DGX Sparks."
+  c_y "Use hostnames where you can — they survive a venue's DHCP; IPs do not."
+  read -rp "Node 1 host (backend + supervisor + coder + sandbox): " NODE1
+  [[ -n "$NODE1" ]] || die "node 1 host is required"
+  read -rp "Node 2 host (specialist farm): " NODE2
+  [[ -n "$NODE2" ]] || die "node 2 host is required"
+  read -rp "SSH user for both nodes (default nvidia): " SSHUSER
+  SSHUSER="${SSHUSER:-nvidia}"
+
+  echo ""
+  c_b "Select Supervisor / Interconnect Mode:"
+  echo "  1) Clustered 200GbE Mode (default) — Nemotron-3-Super-120B-A12B-NVFP4 sharded TP=2"
+  echo "     across Spark 1 + Spark 2 over the 200GbE ConnectX-7 direct QSFP cable"
+  echo "  2) Standard 1GbE Mode              — Nemotron-3.5-Lightning-30B-A3B-NVFP4 on Spark 1"
+  read -rp "Mode [1/2, default 1]: " MODE_CHOICE
+  if [[ "${MODE_CHOICE:-1}" == "2" ]]; then
+    CLUSTER_MODE="standard"
+    SUPERVISOR_REPO="nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4"
+    SUPERVISOR_NAME="nemotron-lightning"
+  else
+    CLUSTER_MODE="clustered"
+    SUPERVISOR_REPO="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+    SUPERVISOR_NAME="nemotron-super"
+  fi
+  c_g "  → Selected mode: $CLUSTER_MODE (Supervisor: $SUPERVISOR_REPO)"
 fi
-c_g "  → Selected mode: $CLUSTER_MODE (Supervisor: $SUPERVISOR_REPO)"
 
 DEVSTRAL_REPO="mistralai/Devstral-Small-2-24B-Instruct-2512"
 NANO30B_REPO="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
@@ -406,9 +423,9 @@ EOF" 2>/dev/null || true
 # ---- 7. start dashboard on node1 (:4456) -----------------------------------
 hr; c_b "7) Dashboard (:4456 on node1)"
 if SSH1 "test -f ~/swarm-assembly/run.sh" 2>/dev/null; then
-  SSH1 "cd ~/swarm-assembly && chmod +x run.sh && ./run.sh"
+  SSH1 "cd ~/swarm-assembly && chmod +x run.sh && ./run.sh --dashboard-only"
 elif [ -f ./run.sh ]; then
-  chmod +x ./run.sh && ./run.sh
+  chmod +x ./run.sh && ./run.sh --dashboard-only
 fi
 
 # ---- done ------------------------------------------------------------------

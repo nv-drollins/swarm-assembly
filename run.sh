@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Swarm Assembly launcher. Run this ON node 1 (the backend host).
 #
-#   ./run.sh            # starts (or restarts) the dashboard in the background
+#   ./run.sh            # brings up any offline model servers (after a reboot)
+#                       # and starts the dashboard in the background on :4456
 #   ./run.sh --stop     # stops the background dashboard
-#   ./run.sh --fg       # runs in the foreground (Ctrl+C to stop)
+#   ./run.sh --fg       # runs the dashboard in the foreground (Ctrl+C to stop)
 #
 # If install.sh wrote .swarm.env, its defaults (nodes, mode, supervisor model)
 # are loaded automatically and can still be overridden by the environment.
@@ -16,10 +17,14 @@ if [ "${1:-}" = "--stop" ] || [ "${1:-}" = "stop" ]; then
 fi
 
 FG=0
-if [ "${1:-}" = "--fg" ] || [ "${1:-}" = "--foreground" ]; then
-  FG=1
-  shift
-fi
+DASHBOARD_ONLY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --fg|--foreground) FG=1; shift ;;
+    --dashboard-only)  DASHBOARD_ONLY=1; shift ;;
+    *) break ;;
+  esac
+done
 
 if [ -f .swarm.env ]; then
   # shellcheck disable=SC1091
@@ -28,16 +33,6 @@ fi
 
 : "${SWARM_NODE1:?set SWARM_NODE1 to this node's hostname/IP (as other hosts see it)}"
 : "${SWARM_NODE2:?set SWARM_NODE2 to Spark 2's hostname/IP}"
-
-VENV="$(pwd)/.venv"
-if [ ! -d "$VENV" ]; then
-  python3 -m venv "$VENV" || {
-    echo "python3 -m venv failed — install it with: sudo apt-get install -y python3-venv" >&2
-    exit 1
-  }
-  "$VENV/bin/pip" install -q --upgrade pip
-  "$VENV/bin/pip" install -q -r backend/requirements.txt
-fi
 
 export SWARM_NODE1 SWARM_NODE2
 export SWARM_SSH_USER="${SWARM_SSH_USER:-nvidia}"
@@ -49,6 +44,32 @@ if [ -z "${SWARM_MODEL:-}" ]; then
   else
     export SWARM_MODEL="nemotron-lightning"
   fi
+fi
+
+# After a reboot of the Sparks, the multi-node TP=2 Ray container (`vllm_super`
+# on :8001) will not be running — and if the solo specialist containers on Spark 2
+# auto-started first, they must be stopped before `vllm_super` (largest, 0.44)
+# starts so GPU memory is allocated largest-first.
+if [ "$DASHBOARD_ONLY" -eq 0 ]; then
+  if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://${SWARM_NODE1}:8001/v1/models" 2>/dev/null)" != "200" ]; then
+    echo "Supervisor (:8001) is offline (e.g. after a reboot) — bringing model servers online in largest-first order..."
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "${SWARM_SSH_USER}@${SWARM_NODE1}" \
+      "sudo -n docker ps -aq --filter 'name=spec-' | xargs -r sudo -n docker rm -f >/dev/null 2>&1 || true"
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "${SWARM_SSH_USER}@${SWARM_NODE2}" \
+      "sudo -n docker ps -aq --filter 'name=spec-' | xargs -r sudo -n docker rm -f >/dev/null 2>&1 || true"
+    ./install.sh --resume
+    exit 0
+  fi
+fi
+
+VENV="$(pwd)/.venv"
+if [ ! -d "$VENV" ]; then
+  python3 -m venv "$VENV" || {
+    echo "python3 -m venv failed — install it with: sudo apt-get install -y python3-venv" >&2
+    exit 1
+  }
+  "$VENV/bin/pip" install -q --upgrade pip
+  "$VENV/bin/pip" install -q -r backend/requirements.txt
 fi
 
 echo "Swarm Assembly  →  http://${SWARM_NODE1}:4456"
