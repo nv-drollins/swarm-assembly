@@ -1,4 +1,4 @@
-# 🐝 Swarm Assembly — Booth Demo Script (3.5–4.5 Minutes)
+# 🐝 Swarm Assembly — Booth Demo Script (3 to 5 Minutes)
 
 **Setup on screen before starting:**
 - Browser open to `http://<spark-1-host>:4456` in full-screen (`F11`).
@@ -6,13 +6,11 @@
 
 ---
 
-## Part 1: The Hook & The 2-Spark Cluster (0:00 – 0:45)
+## Part 1: The 2-Spark Cluster
 
-**[GESTURE TO THE TWO PHYSICAL DGX SPARKS, THEN THE SPLIT CANVAS]**
-
-> "What you're looking at is a live multi-agent AI software team running completely locally across **two NVIDIA DGX Sparks** sitting right here on the table. Nothing is hitting the cloud, and nothing is pre-recorded or simulated.
+> "What you're looking at is a live multi-agent AI software team running completely locally across **two NVIDIA DGX Sparks**. Nothing is hitting the cloud, and nothing is pre-recorded or simulated.
 >
-> Each DGX Spark gives us a Grace Blackwell GB10 superchip with **121 gigabytes of unified memory** — and the two units are linked directly together over their **dual 200-gigabit ConnectX-7 RDMA ports**.
+> Each DGX Spark gives us a Grace Blackwell GB10 superchip with **128 gigabytes of unified memory** — and the two units are linked directly together over their **dual 200-gigabit ConnectX-7 RDMA ports**.
 >
 > That high-speed link lets us do two things at the same time:
 > 1. **First, model sharding across the cluster:** Look at the **Supervisor** at the top of the screen. That's **NVIDIA Nemotron-3-Super — a 120-billion-parameter reasoning model** in NVFP4. Using tensor parallelism (`TP=2`) over the 200-gigabit ConnectX-7 fabric, that 120B model is stretched across **both Sparks simultaneously** (~40 GB per node), acting as the brain of the cluster.
@@ -20,9 +18,7 @@
 
 ---
 
-## Part 2: Why Sub-Agents & a Supervisor? (0:45 – 1:30)
-
-**[POINT TO THE SUPERVISOR AT TOP-CENTER AND THE 8 IDLE BENCH AGENTS AT THE BOTTOM]**
+## Part 2: Why Sub-Agents & a Supervisor?
 
 > "Why build a system this way instead of throwing one giant prompt at a single model?
 >
@@ -35,7 +31,7 @@
 
 ---
 
-## Part 3: Demo 1 — Small, Dynamically Recruited Team (`▶ Build a Small Tool`) (1:30 – 2:45)
+## Part 3: Demo 1 — Small, Dynamically Recruited Team (`▶ Build a Small Tool`)
 
 **[CLICK `▶ Build a Small Tool` IN THE BOTTOM-RIGHT CONTROLS]**
 
@@ -57,7 +53,7 @@
 
 ---
 
-## Part 4: Demo 2 — Full-Swarm Multi-Round Build (`▶ Build a Data Pipeline`) (2:45 – 4:15)
+## Part 4: Demo 2 — Full-Swarm Multi-Round Build (`▶ Build a Data Pipeline`)
 
 **[CLICK `▶ Build a Data Pipeline` IN THE BOTTOM-RIGHT CONTROLS]**
 
