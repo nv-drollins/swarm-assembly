@@ -194,6 +194,7 @@ backend/
 frontend/
   index.html       dashboard shell
   swarm.js         canvas: two Spark zones, assembly animation, telemetry, log
+DEMO_SCRIPT.md     booth presenter talk track (3.5–4.5 min) + Q&A cheat-sheet
 install.sh         prereq checks + CX7 cluster setup + model/endpoint/sandbox provisioning
 run.sh             venv + launch backend on :4456
 ```
